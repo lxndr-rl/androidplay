@@ -6,10 +6,10 @@ GM="$D/gadget_manager --compose-into g1"
 {
 echo "start $(date +%T) udc=$(cat $G/UDC)"
 $GM setup; echo "setup_rc=$?"
-$D/ffs_probe carplay 30 > $D/compose_events.log 2>&1 &
+$D/ffs_probe carplay 40 echo > $D/compose_events.log 2>&1 &
 FP=$!; sleep 2; echo "ffs: $(head -1 $D/compose_events.log)"
 $GM bind; echo "bind_rc=$?"
-sleep 8; echo "t+8 udc_state=$(cat /sys/class/udc/*/state)"
+sleep 6; echo "t+6 udc_state=$(cat /sys/class/udc/*/state)"
 wait $FP; cat $D/compose_events.log
 $GM teardown; echo "teardown_rc=$?"
 umount /dev/ffs-carplay 2>&1

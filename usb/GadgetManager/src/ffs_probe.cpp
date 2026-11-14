@@ -1,6 +1,7 @@
 // ffs_probe: mount FunctionFS, write descriptors/strings so the gadget can bind,
 // then log EP0 events for N seconds. Hardware probe for USB-002; not the final daemon.
-// usage: ffs_probe INSTANCE SECONDS   (instance = ffs.<INSTANCE> in configfs)
+// usage: ffs_probe INSTANCE SECONDS [echo]   (instance = ffs.<INSTANCE> in configfs)
+// echo: bytes read from the OUT endpoint (ep2) are written back on the IN endpoint (ep1).
 #include "gadget_manager.hpp"
 #include <cerrno>
 #include <cstdio>
@@ -8,6 +9,8 @@
 #include <cstring>
 #include <fcntl.h>
 #include <poll.h>
+#include <atomic>
+#include <thread>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -39,19 +42,52 @@ int main(int argc, char** argv) {
     auto s = build_ffs_strings("s10probe");
     if (write(ep0, d.data(), d.size()) != (ssize_t)d.size()) { perror("write descriptors"); return 1; }
     if (write(ep0, s.data(), s.size()) != (ssize_t)s.size()) { perror("write strings"); return 1; }
-    printf("READY descriptors=%zu strings=%zu\n", d.size(), s.size());
+    bool echo = argc > 3 && std::string(argv[3]) == "echo";
+    int epin = -1, epout = -1;  // FFS names endpoints in descriptor order: ep1 = 0x81 IN, ep2 = 0x02 OUT
+    std::atomic<unsigned long long> rx{0}, tx{0}, chunks{0};
+    std::atomic<bool> stop{false};
+    // FunctionFS endpoint files do not support poll: OUT data only arrives while a blocking
+    // read is pending, so the echo runs in its own thread.
+    std::thread echo_thread;
+    // Started on the first ENABLE: a read pending across the composition UNBIND/BIND never
+    // sees data on this kernel (measured), so the thread must start with endpoints active.
+    auto start_echo = [&] { if (echo && !echo_thread.joinable()) echo_thread = std::thread([&] {
+        static unsigned char buf[16384];
+        epin = open((mnt + "/ep1").c_str(), O_WRONLY);
+        epout = open((mnt + "/ep2").c_str(), O_RDONLY);
+        if (epin < 0 || epout < 0) { perror("open ep1/ep2"); return; }
+        int last_err = 0;
+        ssize_t bw = write(epin, "S10HELLO", 8);  // banner: proves device->host before testing host->device
+        printf("ECHO banner write=%zd errno=%d\n", bw, bw < 0 ? errno : 0); fflush(stdout);
+        while (!stop) {
+            ssize_t n = read(epout, buf, sizeof buf);
+            if (n < 0) {
+                // unbind/rebind and not-yet-enabled endpoints make reads fail; keep trying
+                if (errno != last_err) { printf("ECHO read errno=%d (%s)\n", errno, strerror(errno)); fflush(stdout); last_err = errno; }
+                usleep(5000); continue;
+            }
+            last_err = 0;
+            if (n == 0) continue;
+            ssize_t w = write(epin, buf, n);
+            rx += n; if (w > 0) tx += w; chunks++;
+            if (w != n) { printf("ECHO short write %zd/%zd errno=%d\n", w, n, errno); fflush(stdout); }
+        }
+    }); };
+    printf("READY descriptors=%zu strings=%zu echo=%d\n", d.size(), s.size(), echo);
     fflush(stdout);
     RoleSwitchHandler h;
     struct timespec t0; clock_gettime(CLOCK_MONOTONIC, &t0);
     for (;;) {
         struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
         if (t.tv_sec - t0.tv_sec >= secs) break;
-        struct pollfd p = {ep0, POLLIN, 0};
-        if (poll(&p, 1, 500) <= 0) continue;
+        struct pollfd p[1] = {{ep0, POLLIN, 0}};
+        if (poll(p, 1, 500) <= 0) continue;
+        if (!(p[0].revents & POLLIN)) continue;
         FfsEvent ev;
         ssize_t n = read(ep0, &ev, sizeof ev);
         if (n != (ssize_t)sizeof ev) { if (n < 0 && errno != EAGAIN) perror("read ev"); continue; }
         printf("EVENT %s t=%lds", ev_name(ev.type), (long)(t.tv_sec - t0.tv_sec));
+        if (ev.type == 2) start_echo();
         if (ev.type == 4) {
             SetupPacket sp = parse_setup(ev.setup);
             printf(" setup type=%02x req=%02x val=%04x idx=%04x len=%u", sp.type, sp.request, sp.value, sp.index, sp.length);
@@ -63,7 +99,8 @@ int main(int argc, char** argv) {
         }
         printf("\n"); fflush(stdout);
     }
-    printf("DONE\n");
-    close(ep0);
+    printf("ECHO totals rx=%llu tx=%llu chunks=%llu\n", (unsigned long long)rx, (unsigned long long)tx, (unsigned long long)chunks);
+    printf("DONE\n"); fflush(stdout);
+    _exit(0);  // the echo thread may be blocked in read(); do not wait for it
     return 0;
 }

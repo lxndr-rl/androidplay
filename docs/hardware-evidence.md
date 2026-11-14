@@ -53,3 +53,11 @@ Generic Android-style head unit, Allwinner SoC, 1 GB RAM; works with an iPhone o
 - Teardown's first unbind write returned `short write` (the kernel had already dropped the gadget after ffs_probe closed ep0); the code now ignores that write and still removes our link and function (host tests only; not re-run on the phone after that edit).
 - Still NOT shown: data over the endpoints, iAP2, Apple IDs, the radio. The script still toggles `sys.usb.config` to bring adb back; whether the USB HAL recovers without that toggle is untested.
 - User requirement (2026-11-14): the only requirement on the radio is that it has wired CarPlay. That is the design goal, not a verified compatibility claim.
+
+## USB-002: bulk loopback PC <-> S10+ FunctionFS function (2026-11-14) (V)
+`tests/hardware/pc_bulk_client.py` (raw usbfs ioctls, no libusb) + `ffs_probe carplay 40 echo` on the phone via `tests/hardware/usb_gadget_manager_compose.sh`. Log: `diagnostics-*/compose_bulk.log`.
+- Device -> host: banner `S10HELLO` (8 bytes) received on the IN endpoint (0x82).
+- Host -> device -> host: 300 rounds of 4000 random bytes, OUT 0x02 then IN 0x82, **300 ok / 0 mismatches**, 1.2 MB each way in 0.23 s (5.1 MB/s each way, USB 2.0 high-speed, no tuning). Device counted rx=tx=1,200,000 bytes.
+- Lessons (V): (1) FunctionFS endpoint files do not support `poll`; OUT data arrives only while a blocking `read` is pending (use a thread). (2) A read buffer larger than the host transfer needs a short packet to complete: transfers that are an exact multiple of 512 (tried 512 and 4096) timed out; 4000 worked. The real protocol framing must send a short packet or ZLP at message ends or read with exact lengths.
+- NOT shown: iAP2 or any CarPlay protocol on these endpoints, Apple IDs, throughput under sustained video load, behavior with the radio as host.
+- `teardown_rc=1` in this run came from the arm64 `gadget_manager` pushed before the tolerant-teardown edit; the rebuilt binary is pushed to the phone but that path was not re-run.
