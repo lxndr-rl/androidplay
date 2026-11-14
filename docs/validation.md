@@ -68,6 +68,18 @@ Not shown, and not claimed:
 - This is not the production capture path. A normal app only renders its own/launched content on its own display. Capturing the real phone screen without a consent dialog needs platform privileges in the ROM (a platform-signed service or a pre-granted MediaProjection/`CAPTURE_VIDEO_OUTPUT`-class permission): unresolved, ROM work.
 - `requestKeyFrame()` is written but was not exercised; no audio capture; no touch injection; 60 fps not tried.
 
+### MEDIA-003 touch injection on the emulator (2026-11-14, same AVD)
+
+`services/InputBridge`: pure-Java `TouchMapper` (host-tested: drops MOVE/UP without DOWN, second DOWN becomes MOVE, clamping, release on disconnect) + `InjectMain`, a dex run with `app_process` as the adb shell uid that injects MotionEvents onto a given display through hidden `InputManagerGlobal.injectInputEvent`. Script: `tests/integration/emulator_touch.sh` (refuses non-emulators unless `S10CAROS_ALLOW_DEVICE=1`).
+
+| Check | Result | Evidence |
+|---|---|---|
+| Tap injected at (300,215) onto the virtual display while Settings is shown there | injector reported `sent=2 dropped=0` | stdout |
+| Effect visible in the **encoded stream** | PASS: frame before = Settings home; frame after = "Network & internet" page; PSNR 13.9 dB between them | `.build/emulator_touch/{before,after}.png` (viewed) |
+| First attempts | failed for test-script reasons (stale metrics file from a previous run; foreground-activity grep not display-specific); fixed by using the stream itself as evidence | – |
+
+Not shown: injection by an unprivileged process (impossible: needs `INJECT_EVENTS`; the ROM must run this as a platform/system component); multi-touch; CarPlay HID report -> injector wiring; hidden-API reflection on other Android versions or on the S10+ LineageOS; latency.
+
 ## Acceptance criteria
 
 Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hardware, logs, open issues.
@@ -80,7 +92,7 @@ Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hard
 | AC-04 | Session established | NOT TESTED | iAP2 + AirPlay sequencers pass against fake peers only | 2026-11-14 | none | Protocol facts come from one third-party document measured on one car |
 | AC-05 | Android video transmitted | NOT TESTED (to the radio) | Android side: VirtualDisplay + MediaCodec produce a decodable 1200x512 baseline stream on the emulator; stream passes the AirPlay framing/AES-CTR path in a host test | 2026-11-14 | Android Emulator API 36 | nothing sent over USB/network; encoder not run on S10+; phone-screen capture without consent unresolved |
 | AC-06 | Audio transmitted | NOT TESTED | RTP packetizer tested only | – | none | no capture path |
-| AC-07 | Touch input works | NOT TESTED | coordinate scaling + HID report edges unit-tested | – | none | HID descriptor parser missing; no injection into Android |
+| AC-07 | Touch input works | NOT TESTED (from the radio) | Android side: injected touch changed the content of a virtual display, seen in the encoded stream (emulator); HID edge/scaling unit-tested | 2026-11-14 | Android Emulator API 36 | no HID descriptor parser; no wiring CarPlay -> injector; injector needs privileges; single touch only |
 | AC-08 | Launcher opens apps | PARTIAL (emulator) | tile tap launched Calendar; ordering/hiding verified by screenshot | 2026-11-14 | Android Emulator API 36 | not on S10+/LineageOS; not tested from the head unit touch screen |
 | AC-09 | No need to touch the phone screen in normal use | NOT TESTED | – | – | none | needs AC-01..07 |
 | AC-10 | Auto-reconnect after unplug | NOT TESTED | ConnectionPolicy backoff logic unit-tested | 2026-11-14 | none | policy only; no real USB events or session |

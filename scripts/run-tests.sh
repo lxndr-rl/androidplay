@@ -47,6 +47,12 @@ if [ -x "$ROOT/packages/CarLauncher/build.sh" ]; then
   else skipit launcher-core "javac missing"; fi
 fi
 
+# --- InputBridge core (plain Java) ---
+if [ -x "$ROOT/services/InputBridge/build.sh" ]; then
+  if command -v javac >/dev/null; then run inputbridge-core "$ROOT/services/InputBridge/build.sh" test
+  else skipit inputbridge-core "javac missing"; fi
+fi
+
 echo "=== S10CarOS Level-1 test report ($(date -u +%FT%TZ)) ==="
 printf '%s\n' "${REPORT[@]}"
 echo "pass=$pass fail=$fail skip=$skip"
