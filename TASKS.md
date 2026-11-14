@@ -5,7 +5,7 @@ Status: TODO / RUNNING / DONE(evidence) / BLOCKED. Initial seed; agents append e
 | ID | Owner | Objective | Deps | Status | Evidence | Next |
 |----|-------|-----------|------|--------|----------|------|
 | ROM-001 | A | Verify LineageOS branch for beyond2lte (version, maintenance, kernel, blobs) | – | DONE | research/lineageos.md | ROM-003 |
-| ROM-002 | A | Verify real device model (needs phone on adb) | phone | BLOCKED (no device attached) | `adb devices` empty 2026-11-14 | user connects phone |
+| ROM-002 | A | Verify real device model (needs phone on adb) | phone | DONE 2026-11-14 (gate 0 only) | diagnostics.sh on serial R58M74PSHAY: ro.product.model=SM-G975F, device=beyond2, soc=exynos9820, stock Android 12 (sdk 31, build SP1A.210812.016.G975FXXSGHWC2), SELinux Enforcing, shell uid, UDC 10c00000.dwc3, typec port0 data_role=[device], no partner, battery 3% charging. Raw output in `diagnostics-20261114-151452/`. Model matches target; Bootloader LOCKED (ro.boot.flash.locked=1, verifiedbootstate=green, warranty_bit=0, security patch 2023-03-01). NOT checked: OEM-unlock toggle (needs screen touch), wiki firmware base, DS variant | read wiki base-firmware requirement; ROM-004 decision |
 | ROM-003 | A | Install build deps; assess disk/RAM for AOSP | ROM-001 | TODO | host: 39GB RAM, 189GB free | scripts/setup.sh |
 | USB-001 | C | Feasibility: Exynos 9820 gadget/ConfigFS/FunctionFS for CarPlay USB role | – | DONE (code-backed, no HW) | research/usb-feasibility.md | USB-003 |
 | USB-002 | C | Gadget script + host-side descriptor tests | USB-001 | TODO | – | – |
