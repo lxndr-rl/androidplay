@@ -14,7 +14,8 @@ SUBAGENTES
 - QA: pending (Fase 2)
 - Research: running
 
-PROGRESO VERIFICADO
+PROGRESO VERIFICADO (Fase 0 investigacion completa; codigo sin HW)
+0. Research A/B/C/G committed; DISC-001 resuelto: spec abierto lado-telefono existe (OrangeCar, 1 coche).
 1. Repo inicializado, AGENTS.md y TASKS.md creados.
 2. Host: Ubuntu 24.04, 8 cores, 39GB RAM, 189GB libre, JDK17; faltan repo/cmake/rust.
 
