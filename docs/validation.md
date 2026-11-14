@@ -93,6 +93,20 @@ Not shown: injection by an unprivileged process (impossible: needs `INJECT_EVENT
 
 Not shown: capture on the S10+ audio HAL; whether REMOTE_SUBMIX works there; capture of other streams (telephony, alert); per-app playback capture without privileges (needs MediaProjection or privileged permission; the ROM must run this as a system component); latency and A/V sync with the video; sending the packets to anything.
 
+### CP-008 host part: whole sender stack over real loopback sockets (2026-11-14)
+
+`SessionRunner` (POSIX poll loop executing the Client's Actions) against a fake car with its own threads and sockets on 127.0.0.1 (`test_loopback_session`, ctest, ASan/UBSan, 5/5 consecutive runs identical). Inputs are the two real emulator captures (H.264 Settings stream, 440 Hz PCM).
+
+| Observed by the fake car over sockets | Result |
+|---|---|
+| Control sequence | SETUP /setup, GET /info, RECORD, modesChanged 2/1 (initial sync), modesChanged 1/1, SETUP screen, SETUP audio, in that order |
+| Screen channel | 50 frames decrypted with an independently derived key (keystream stayed in sync across TCP reads); config sent twice (re-sent after the car's forceKeyFrame) |
+| Audio | 353 RTP packets in 2.6 s (about 136/s) over UDP |
+| Housekeeping | 2 feedback requests, 3 UDP keepalives, timing request answered once by our UDP responder |
+| Event channel (car -> us) | 4 requests, 4 replies (200); touch Down/Up reached the callback scaled to 1199,511; forceKeyFrame reached the encoder hook; changeModes(borrow audio) followed by a fresh modesChanged 1/2 |
+
+Not shown: any USB/CDC-NCM link, IPv6 link-local dialling, mDNS, a real head unit or any traffic with a real phone; the Android native service (JNI/foreground service) that would run this runner next to the encoder, injector and audio capture; stalled-socket handling (the 2 s send timeout exists but is not exercised); multi-hour behaviour.
+
 ## Acceptance criteria
 
 Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hardware, logs, open issues.

@@ -1,0 +1,126 @@
+#include "session_runner.hpp"
+#include <arpa/inet.h>
+#include <cerrno>
+#include <cstring>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+namespace s10::airplay {
+
+static void closeFd(int& fd) { if (fd >= 0) { ::close(fd); fd = -1; } }
+
+SessionRunner::~SessionRunner() { closeAll(); }
+
+void SessionRunner::closeAll() {
+    closeFd(ctl_); closeFd(evt_); closeFd(scr_); closeFd(aud_); closeFd(udpOut_); closeFd(tim_);
+}
+
+bool SessionRunner::fail(const std::string& why) {
+    if (!failed_) { failed_ = true; error_ = why; }
+    return false;
+}
+
+int SessionRunner::bindTiming() {
+    closeFd(tim_);
+    tim_ = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (tim_ < 0) return -1;
+    sockaddr_in a{}; a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_ANY); a.sin_port = 0;
+    socklen_t l = sizeof a;
+    if (::bind(tim_, reinterpret_cast<sockaddr*>(&a), sizeof a) != 0 || ::getsockname(tim_, reinterpret_cast<sockaddr*>(&a), &l) != 0) { closeFd(tim_); return -1; }
+    return ntohs(a.sin_port);
+}
+
+bool SessionRunner::dialTcp(int port, bool nodelay, int& fdOut) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return fail("socket: " + std::string(std::strerror(errno)));
+    sockaddr_in a{}; a.sin_family = AF_INET; a.sin_port = htons(static_cast<uint16_t>(port));
+    if (::inet_pton(AF_INET, host_.c_str(), &a.sin_addr) != 1) { ::close(fd); return fail("bad host " + host_); }
+    if (::connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof a) != 0) { int e = errno; ::close(fd); return fail("connect :" + std::to_string(port) + ": " + std::strerror(e)); }
+    if (nodelay) { int one = 1; ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one); }
+    timeval tv{2, 0};   // a write blocked > 2 s means the car stalled (doc 6.4)
+    ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+    fdOut = fd;
+    return true;
+}
+
+bool SessionRunner::sendAll(int fd, const std::vector<uint8_t>& b) {
+    size_t off = 0;
+    while (off < b.size()) {
+        ssize_t n = ::send(fd, b.data() + off, b.size() - off, MSG_NOSIGNAL);
+        if (n <= 0) return fail(std::string("send: ") + (n == 0 ? "closed" : std::strerror(errno)));
+        off += static_cast<size_t>(n);
+    }
+    return true;
+}
+
+bool SessionRunner::run(const std::vector<Action>& actions) {
+    for (const auto& a : actions) {
+        switch (a.kind) {
+        case Action::Kind::SendControl: if (!sendAll(ctl_, a.bytes)) return false; break;
+        case Action::Kind::OpenEvent: if (!dialTcp(a.port, false, evt_)) return false; break;
+        case Action::Kind::OpenScreen: if (!dialTcp(a.port, true, scr_)) return false; break;
+        case Action::Kind::OpenAudio:
+            audioPort_ = a.port;
+            if (udpOut_ < 0 && (udpOut_ = ::socket(AF_INET, SOCK_DGRAM, 0)) < 0) return fail("udp socket");
+            break;
+        case Action::Kind::SendEvent: if (evt_ < 0 || !sendAll(evt_, a.bytes)) return fail("event channel not open"); break;
+        case Action::Kind::SendScreen: if (scr_ < 0 || !sendAll(scr_, a.bytes)) return fail("screen channel not open"); break;
+        case Action::Kind::SendAudio:
+        case Action::Kind::SendUdpKeepAlive: {
+            if (udpOut_ < 0 && (udpOut_ = ::socket(AF_INET, SOCK_DGRAM, 0)) < 0) return fail("udp socket");
+            sockaddr_in to{}; to.sin_family = AF_INET; ::inet_pton(AF_INET, host_.c_str(), &to.sin_addr);
+            to.sin_port = htons(static_cast<uint16_t>(a.kind == Action::Kind::SendAudio ? audioPort_ : a.port));
+            ::sendto(udpOut_, a.bytes.data(), a.bytes.size(), 0, reinterpret_cast<sockaddr*>(&to), sizeof to);   // UDP: best effort
+            break;
+        }
+        case Action::Kind::Failed: return fail(a.note);
+        }
+    }
+    return true;
+}
+
+bool SessionRunner::start(Client& client, const std::string& host, int controlPort) {
+    client_ = &client; host_ = host;
+    if (!dialTcp(controlPort, false, ctl_)) return false;
+    return run(client.start());
+}
+
+bool SessionRunner::step(int timeoutMs, uint64_t nowMs) {
+    if (failed_ || !client_) return false;
+    pollfd p[3]; int n = 0, iCtl = -1, iEvt = -1, iTim = -1;
+    if (ctl_ >= 0) { iCtl = n; p[n++] = {ctl_, POLLIN, 0}; }
+    if (evt_ >= 0) { iEvt = n; p[n++] = {evt_, POLLIN, 0}; }
+    if (tim_ >= 0) { iTim = n; p[n++] = {tim_, POLLIN, 0}; }
+    int r = ::poll(p, static_cast<nfds_t>(n), timeoutMs);
+    if (r < 0 && errno != EINTR) return fail(std::string("poll: ") + std::strerror(errno));
+    uint8_t buf[65536];
+    if (r > 0) {
+        if (iCtl >= 0 && (p[iCtl].revents & (POLLIN | POLLHUP))) {
+            ssize_t k = ::recv(ctl_, buf, sizeof buf, 0);
+            if (k <= 0) return fail("control channel closed by the car");
+            if (!run(client_->onControlBytes(buf, static_cast<size_t>(k)))) return false;
+        }
+        if (iEvt >= 0 && (p[iEvt].revents & (POLLIN | POLLHUP))) {
+            ssize_t k = ::recv(evt_, buf, sizeof buf, 0);
+            if (k <= 0) return fail("event channel closed by the car");
+            if (!run(client_->onEventBytes(buf, static_cast<size_t>(k)))) return false;
+        }
+        if (iTim >= 0 && (p[iTim].revents & POLLIN)) {
+            sockaddr_in from{}; socklen_t fl = sizeof from;
+            ssize_t k = ::recvfrom(tim_, buf, sizeof buf, 0, reinterpret_cast<sockaddr*>(&from), &fl);
+            if (k > 0) {
+                auto rep = client_->onTimingPacket(buf, static_cast<size_t>(k));
+                if (!rep.empty()) ::sendto(tim_, rep.data(), rep.size(), 0, reinterpret_cast<sockaddr*>(&from), fl);
+            }
+        }
+    }
+    return run(client_->tick(nowMs));
+}
+
+bool SessionRunner::pushVideo(const uint8_t* d, size_t n) { return !failed_ && client_ && run(client_->pushVideo(d, n)); }
+bool SessionRunner::pushAudio(const uint8_t* d, size_t n) { return !failed_ && client_ && run(client_->pushAudioPcm(d, n)); }
+
+}  // namespace s10::airplay
