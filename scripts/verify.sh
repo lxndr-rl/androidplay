@@ -4,6 +4,7 @@
 #   64 GB RAM and 400 GB storage "for lineage-21 and up". Override with env vars.
 # Exit code: 0 all requirements met, 1 one or more unmet.
 set -u
+export PATH="$HOME/bin:$PATH"
 SRC_DIR="${S10CAROS_SRC:-$HOME/android/lineage}"
 MIN_DISK_GB="${S10CAROS_MIN_DISK_GB:-400}"
 MIN_RAM_GB="${S10CAROS_MIN_RAM_GB:-64}"
