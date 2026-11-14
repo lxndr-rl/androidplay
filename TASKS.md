@@ -28,5 +28,5 @@ Status: TODO / RUNNING / DONE(evidence) / BLOCKED. Initial seed; agents append e
 | HW-001 | user | Provide S10+ on adb, CarPlay radio model, USB analyzer/usbmon capture | – | BLOCKED | user |
 | LEGAL-001 | user | Review Apple VID/"iPhone" identity use | – | OPEN | user |
 | ROM-004 | A | Larger build host or layering on official nightly | – | OPEN | user |
-| CP-005 | orch | Identification/auth driver + post-auth burst on top of DeviceSession (host-simulated accessory in tests) | CP-004 | TODO | – |
+| CP-005 | orch | Identification/auth driver + post-auth burst on top of DeviceSession (host-simulated accessory in tests) | CP-004 | DONE (sim only) 2026-11-14: iap2_driver + test_iap2_driver pass (ASan/UBSan) against a simulated accessory; reset 0x5001 bytes match doc; 0x4C01 wrapper-group id UNVERIFIED; cert/signature NOT verified (callbacks exposed) | CP-006 |
 | CP-006 | orch | AirPlay-over-NCM session (SETUP/RECORD, AES-CTR video, RTP audio) | CP-005 | TODO | – |

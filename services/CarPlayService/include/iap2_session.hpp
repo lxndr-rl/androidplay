@@ -44,7 +44,7 @@ public:
 
     // Queue a control message (one DATA packet outstanding at a time). Returns false if not established,
     // or if a gate list is set and the accessory did not list the id in its 0x0007 list.
-    bool sendMessage(const Message& m);
+    bool sendMessage(const Message& m, bool bypassGate = false);
 
     void setAccessoryAcceptList(std::vector<uint16_t> list) { accept_ = std::move(list); gated_ = true; }
 

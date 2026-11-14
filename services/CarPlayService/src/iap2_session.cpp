@@ -103,9 +103,9 @@ void DeviceSession::handlePacket(const Packet& p) {
     }
 }
 
-bool DeviceSession::sendMessage(const Message& m) {
+bool DeviceSession::sendMessage(const Message& m, bool bypassGate) {
     if (state_ != State::Established) return false;
-    if (gated_ && !accepts(accept_, m.id)) return false;
+    if (gated_ && !bypassGate && !accepts(accept_, m.id)) return false;
     auto body = encodeMessage(m);
     if (body.empty() || body.size() > static_cast<size_t>(params_.maxRxLen) - 10) return false;
     outq_.push_back(std::move(body));

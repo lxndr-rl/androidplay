@@ -37,6 +37,9 @@ Param strParam(uint16_t id, const std::string& s);   // UTF-8 + NUL
 Param u8Param(uint16_t id, uint8_t v);
 Param u16Param(uint16_t id, uint16_t v);             // big endian
 Param u64Param(uint16_t id, uint64_t v);             // big endian
+Param groupParam(uint16_t id, const std::vector<Param>& children);  // data = encoded child params
+// Decode a group param's children (false on malformed).
+bool parseGroup(const Param& g, std::vector<Param>& out);
 
 // Returns empty on overflow (> 65535).
 std::vector<uint8_t> encodeMessage(const Message& m);

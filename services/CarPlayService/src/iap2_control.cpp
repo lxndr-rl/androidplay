@@ -21,6 +21,31 @@ Param u64Param(uint16_t id, uint64_t v) {
     return p;
 }
 
+Param groupParam(uint16_t id, const std::vector<Param>& ch) {
+    Param g; g.id = id;
+    for (const auto& c : ch) {
+        uint16_t l = static_cast<uint16_t>(4 + c.data.size());
+        g.data.push_back(static_cast<uint8_t>(l >> 8)); g.data.push_back(static_cast<uint8_t>(l));
+        g.data.push_back(static_cast<uint8_t>(c.id >> 8)); g.data.push_back(static_cast<uint8_t>(c.id));
+        g.data.insert(g.data.end(), c.data.begin(), c.data.end());
+    }
+    return g;
+}
+
+bool parseGroup(const Param& g, std::vector<Param>& out) {
+    size_t off = 0;
+    while (off < g.data.size()) {
+        if (g.data.size() - off < 4) return false;
+        size_t pl = (static_cast<size_t>(g.data[off]) << 8) | g.data[off + 1];
+        if (pl < 4 || off + pl > g.data.size()) return false;
+        out.push_back(Param{static_cast<uint16_t>((g.data[off + 2] << 8) | g.data[off + 3]),
+                            std::vector<uint8_t>(g.data.begin() + static_cast<std::ptrdiff_t>(off + 4),
+                                                 g.data.begin() + static_cast<std::ptrdiff_t>(off + pl))});
+        off += pl;
+    }
+    return true;
+}
+
 std::vector<uint8_t> encodeMessage(const Message& m) {
     size_t total = 6;
     for (const auto& p : m.params) {
