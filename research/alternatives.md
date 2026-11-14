@@ -106,3 +106,23 @@ The Carlinkit/Autobox protocol docs (pycarplay, node-CarPlay) describe the **don
 | Real-car evidence (claimed) | many reports | receiver app only | CFMOTO dash | Audi MIB3 | unspecified vehicle | Jaguar F-PACE |
 
 All "real-car" entries are project claims; none was verified by us.
+
+## D. How the existing "Android box" style projects handle the wired link (orchestrator read, 2026-11-14)
+Sources: `research/okcaros-recovery.md` (4.3) and `docs/en/architecture.md` of https://github.com/Enthlinn/okcarlink (MIT, fetched today; sections 1, 7.3). I read the docs only, not the daemon source. Tags: [V] = stated in those docs, [U] = not verified.
+
+Two different wired models exist; they are **not the same thing**:
+
+| | Model 1: car runs the phone-side handshake (OrangeCar, `research/carplay-protocol.md`) | Model 2: head unit speaks usbmux to an "iPhone" (OkCarLink wired mode, OkcarOS) |
+|---|---|---|
+| Who is USB host | head unit first, then a **role swap** makes the phone the host (vendor requests C0 53 / 40 51) | head unit stays host; the phone is a **device in every mode** [V: "plays the device role in every mode"] |
+| Phone presents | VID 05AC / PID 12A8, iAP2 over USB | Apple device: usbmux interface + NCM; host sends 16-byte usbmux frames, version handshake, TCP-over-usbmux to the lockdown port [V] |
+| Authentication seen | iAP2 identification/auth (phone is the verifier) | lockdown `StartSession` with TLS (phone-generated self-signed identity), then `StartService com.apple.carkit.service` returning a **raw iAP2 byte pipe** [V] |
+| Measured on | one Jaguar/Harman unit (QNX) | a head-unit DiPlay app (claim; OEM units not shown) [U] |
+| Kernel needs | dwc3 role switch (unmeasured on S10+: PC refused DR_Swap) | none beyond FunctionFS: FFS + NCM from userspace, kernel unmodified [V] |
+
+Consequences for S10CarOS (analysis, [U] until the radio is captured):
+- Generic Android head units (Allwinner and similar) usually run a vendor CarPlay app on Android that talks to an iPhone through an **Android-hosted usbmux/lockdown stack**; if that holds for the user's radio, Model 2 applies and the role swap is not needed. This is a hypothesis; the radio's CarPlay stack is unidentified.
+- Our measured FFS path (bulk loopback verified on the S10+) is the transport Model 2 needs. Missing: usbmux framing, lockdown (plist over mux, TLS server), `com.apple.carkit.service`, iAP2 on the pipe, NCM.
+- Both models still need the Apple VID/PID (hosts match by it): LEGAL-001 stays open and is the user's call.
+- OkCarLink is flagged in section A1 (provenance unknown, internal `okcar-*` names). Use as a specification to cross-check, write our own code, do not copy.
+- OkcarOS's kernel route (`f_okcar_*` + `/dev/okcar` mode switch in dwc3 glue) is the heavier alternative; not needed if Model 2 is right.
