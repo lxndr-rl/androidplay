@@ -23,8 +23,10 @@ Status: TODO / RUNNING / DONE(evidence) / BLOCKED. Initial seed; agents append e
 ## New tasks
 | ID | Owner | Objective | Deps | Status | Next |
 |----|-------|-----------|------|--------|------|
-| CP-004 | B | Port OrangeCar sequence (iAP2 session, NCM, AirPlay SETUP) to Android/C++ reusing CarPlayService codec; respect GPL-3 (clean-room from protocol.md or license service as GPL-3) | DISC-001 | TODO | decide licensing approach |
+| CP-004 | B/orch | Phone-side iAP2 link session + control codec in C++ (clean-room from OrangeCar protocol.md facts). PARTIAL DONE 2026-11-14: services/CarPlayService iap2_session/iap2_control; test_iap2_session passes (ASan/UBSan), byte-exact vs captured Jaguar SYN and SYN|ACK quoted in the doc. NOT done: identification/auth flow driver, post-auth burst, CDC-NCM/IPv6, mDNS, AirPlay session (video/audio/touch), timers. Evidence is doc-quoted, not captured by us. | DISC-001 | PARTIAL | next: CP-005 identification driver |
 | USB-003 | C | Role-swap to host on S10 w/o VBUS back-feed; check PD DR_Swap, max77705 | phone, meter | BLOCKED (HW) | – |
 | HW-001 | user | Provide S10+ on adb, CarPlay radio model, USB analyzer/usbmon capture | – | BLOCKED | user |
 | LEGAL-001 | user | Review Apple VID/"iPhone" identity use | – | OPEN | user |
 | ROM-004 | A | Larger build host or layering on official nightly | – | OPEN | user |
+| CP-005 | orch | Identification/auth driver + post-auth burst on top of DeviceSession (host-simulated accessory in tests) | CP-004 | TODO | – |
+| CP-006 | orch | AirPlay-over-NCM session (SETUP/RECORD, AES-CTR video, RTP audio) | CP-005 | TODO | – |
