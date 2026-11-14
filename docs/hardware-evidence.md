@@ -30,3 +30,19 @@ Method: on-device script (survives adb loss) wrote `host` to `typec/port0/data_r
 - Kernel (V): `data_role_store host` -> `max77705_dr_set: typec_power_role=0, typec_data_role=0, role=1` -> opcode 0x37 sent to the MAX77705 -> no role change. So the Samsung Type-C manager does accept the request path; the PC end did not perform a DR_Swap (a PC port is typically not DRP-capable: HYPOTHESIS, PC port capabilities not read).
 - Charging unaffected: ~545 mA at 5 V (`Inow=547mA`, `Imax=1100mA`, VBUS valid), SOC 15%.
 - NOT learned: whether the swap works against a real radio (a car port may accept DR_Swap, or the radio side expects the phone in device mode and the role-switch happens via the Apple vendor requests documented in research/carplay-protocol.md, not via Type-C DR_Swap). NOT tested: `power_role` writes, accessory mode, a powered hub, VBUS behavior in host mode.
+
+## USB-002 attempt: FunctionFS gadget on the real UDC, host = PC (2026-11-14, root)
+Binaries built with NDK 26.1 (aarch64, API 29): `usb/GadgetManager/src/ffs_probe.cpp` (+ `gadget_manager`). Script: `tests/hardware/usb_ffs_probe_inplace.sh`. Raw log: `diagnostics-*/probe2.log`.
+- Run 1 (new gadget `s10probe`, neutral VID 1d6b:0104): `mkdir /config/usb_gadget/s10probe` -> `Out of memory` (V). The Samsung kernel refuses a second ConfigFS gadget; `gadget_manager setup` therefore cannot work as written on this phone. adb was restored by the script (UDC rebind + sys.usb.config toggle).
+- `mkdir g1/functions/ffs.carplay` works (V, rc=0).
+- Run 2 (compose into existing `g1`, keep `ffs.adb`, add `ffs.carplay` as `configs/b.1/function1`, unbind -> link -> bind): (V)
+  - UDC `configured`, high-speed.
+  - PC `lsusb -v -d 04e8:685d`: `bNumInterfaces 2`; interface 0 = adb (255/66/1, EP1 OUT/IN); interface 1 = our FFS function (255/0/0, bulk EP2 IN 0x82 / OUT 0x02). Our descriptors (66 B) and strings (27 B) were accepted by the kernel.
+  - FFS events on ep0: BIND, UNBIND, BIND, ENABLE. No SETUP events (the PC sent no class/vendor request).
+  - Cleanup removed the function, UDC rebound, `sys.usb.config=adb`, adb back, 2 funcs -> 1 interface on the PC again (V).
+- Identity used: stock Samsung VID/PID (04e8:685d). No Apple IDs were used (LEGAL-001 open).
+- NOT shown: bulk data transfer (no PC-side client), iAP2 over the endpoints, the Apple VID/PID, CDC-NCM bring-up, anything with the radio.
+- Design consequence: GadgetManager must compose into the existing gadget (or replace its functions in place) instead of creating `s10carplay`; the unit tests assume a new gadget and need updating.
+
+## Radio (user-reported, not verified by us)
+Generic Android-style head unit, Allwinner SoC, 1 GB RAM; works with an iPhone over USB cable (user statement). Model unknown. Whether its USB port is host-only, which CarPlay app/stack it runs, and whether it accepts a non-iPhone device: unknown.

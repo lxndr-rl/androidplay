@@ -10,3 +10,7 @@ test: all
 clean:
 	rm -rf build
 .PHONY: all test clean
+build/ffs_probe: src/ffs_probe.cpp src/gadget_manager.cpp include/gadget_manager.hpp
+	@mkdir -p build && $(CXX) $(CXXFLAGS) src/ffs_probe.cpp src/gadget_manager.cpp -o $@
+.PHONY: probe
+probe: build/ffs_probe

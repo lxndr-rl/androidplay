@@ -19,12 +19,15 @@ int main(int argc, char** argv) {
         else if (a == "--takeover") c.takeover = val();
         else if (a == "--vid") c.vid = strtoul(val().c_str(), 0, 0);
         else if (a == "--pid") c.pid = strtoul(val().c_str(), 0, 0);
+        else if (a == "--manufacturer") c.manufacturer = val();
+        else if (a == "--product") c.product = val();
+        else if (a == "--serial") c.serial = val();
         else if (a[0] != '-') cmd = a;
         else { fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
     if (cmd.empty()) {
         fprintf(stderr, "usage: gadget_manager [--dry-run] [--fake-root DIR] [--name N] [--udc U] "
-                        "[--takeover g1] [--vid V] [--pid P] setup|bind|unbind|teardown|status\n");
+                        "[--takeover g1] [--vid V] [--pid P] [--manufacturer M] [--product P] [--serial S] setup|bind|unbind|teardown|status\n");
         return 2;
     }
     GadgetManager m(fs, c);
