@@ -1,0 +1,36 @@
+# DRAFT SELinux policy, NOT compiled against the LineageOS tree and NOT run on a device.
+# Place in device/samsung/exynos9820-common/sepolicy/vendor/ (the common tree already has
+# sepolicy/vendor/{init,vendor_init,file_contexts,genfs_contexts}; genfs already labels
+# .../10c00000.dwc3/udc/10c00000.dwc3/current_speed as sysfs_usb).
+type s10_gadgetd, domain;
+type s10_gadgetd_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(s10_gadgetd)
+
+# ConfigFS gadget tree: mkdir/rmdir, attribute read/write, function symlinks.
+allow s10_gadgetd configfs:dir { create_dir_perms add_name remove_name rmdir };
+allow s10_gadgetd configfs:file rw_file_perms;
+allow s10_gadgetd configfs:lnk_file { create read unlink getattr };
+
+# UDC enumeration (/sys/class/udc).
+allow s10_gadgetd sysfs_udc:dir r_dir_perms;
+allow s10_gadgetd sysfs_udc:file r_file_perms;
+allow s10_gadgetd sysfs_usb:dir r_dir_perms;
+allow s10_gadgetd sysfs_usb:file r_file_perms;
+
+# FunctionFS mount (ep0, epN) under /dev/usb-ffs/s10carplay.
+allow s10_gadgetd functionfs:dir search;
+allow s10_gadgetd functionfs:file rw_file_perms;
+
+# Role swap to host later: usbfs access to the radio (hypothesis, phase 2).
+allow s10_gadgetd usb_device:chr_file rw_file_perms;
+allow s10_gadgetd usb_device:dir r_dir_perms;
+
+# Unix socket toward CarPlayService (path per AGENTS.md contract; type name TBD by Agent B).
+# allow s10_gadgetd s10_carplay_socket:sock_file { create write unlink };
+
+# Needed property access to read ro.serialno / sys.usb.* (read) -- vendor domains use:
+get_prop(s10_gadgetd, vendor_default_prop)
+
+# Open questions (hypothesis): AOSP neverallow rules may restrict non-HAL domains writing configfs;
+# if the build fails on a neverallow, move the configfs write into hal_usb_gadget_default
+# (vendor HAL extension) or run the manager from init via an `exec` command in the init script.

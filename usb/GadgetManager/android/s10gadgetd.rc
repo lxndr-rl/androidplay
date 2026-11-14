@@ -1,0 +1,31 @@
+# DRAFT, NOT validated on a device (no phone attached 2026-11-14).
+# Install to /vendor/etc/init/s10gadgetd.rc (via PRODUCT_COPY_FILES in device/samsung/beyond2lte).
+# Prereq (code-backed): LineageOS exynos9820-common init.exynos9820.usb.rc already mounts /config
+# usb_gadget g1 and the USB gadget HAL (android.hardware.usb.gadget-service.samsung) owns UDC
+# 10c00000.dwc3. Only ONE gadget can hold the UDC, so we take over explicitly with --takeover g1.
+
+on post-fs-data
+    mkdir /dev/usb-ffs/s10carplay 0770 system system
+
+on boot
+    # FunctionFS instance for the CarPlay accessory interface. Mounted by init (already allowed
+    # to mount functionfs: same pattern as adb/mtp/ptp in init.exynos9820.usb.rc).
+    mount functionfs s10carplay /dev/usb-ffs/s10carplay rmode=0770,fmode=0660,uid=1000,gid=1000,no_disconnect=1
+
+# Daemon: builds the configfs tree, writes FFS descriptors + handles EP0 role-switch requests.
+# Disabled by default; start explicitly: `setprop sys.s10.carplay 1`.
+# NOTE: only configfs setup is implemented; the FFS ep0 serve loop (write descriptors, answer
+# role-switch requests via RoleSwitchHandler, then `bind`) is NOT implemented yet.
+service s10gadgetd /vendor/bin/gadget_manager --takeover g1 setup
+    class late_start
+    user system
+    group system usb
+    disabled
+    oneshot
+    seclabel u:r:s10_gadgetd:s0
+
+on property:sys.s10.carplay=1
+    start s10gadgetd
+
+on property:sys.s10.carplay=0
+    stop s10gadgetd
