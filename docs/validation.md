@@ -19,7 +19,7 @@ Date of this record: 2026-11-14. Only what was actually run is marked. No phone 
 | Level | Scope | State 2026-11-14 |
 |---|---|---|
 | 1 Software | unit tests, static analysis, serialization | **Run:** 6/6 suites pass (see below). No static analyzer beyond `-Wall -Wextra` and sanitizers. |
-| 2 Android | services start, permissions, SELinux, capture, encode, audio, input injection | NOT TESTED (no device, no ROM build) |
+| 2 Android | services start, permissions, SELinux, capture, encode, audio, input injection | PARTIAL, emulator only (see below). Not the S10+, not LineageOS. |
 | 3 USB | enumeration, descriptors, endpoints, reconnect | NOT TESTED (host-side tests use a fake configfs tree only) |
 | 4 CarPlay | radio detection, auth, session, video, audio, controls | NOT TESTED. Mocks/fake receivers written by us prove internal consistency only. |
 | 5 Real hardware | S10+, radio, cable, power, thermals, soak | NOT TESTED |
@@ -36,6 +36,22 @@ Date of this record: 2026-11-14. Only what was actually run is marked. No phone 
 
 Not covered: the Android shell classes of the launcher (built, never executed), the FFS ep0 loop, anything needing a kernel.
 
+## Emulator run (2026-11-14, Level 2, NOT the target device)
+
+Hardware/OS: Android Emulator, AVD `Medium_Phone_API_36.1` (x86_64, API 36 Google APIs Play Store image, KVM), headless. This says nothing about the S10+, LineageOS, SELinux policy of the ROM, or USB.
+
+| Check | Result | Evidence |
+|---|---|---|
+| First install crashed: `startForeground(connectedDevice)` threw SecurityException on API 36 (needs one of CHANGE_NETWORK_STATE, CHANGE_WIFI_MULTICAST_STATE, ...) | **bug found and fixed** (both added to the manifest) | logcat AndroidRuntime stack, then `dumpsys`: `isForeground=true types=0x10` |
+| APK installs, `LauncherActivity` starts, `ConnectionService` stays foreground, no AndroidRuntime errors | PASS | pid present, no errors in logcat |
+| Default start shows `CONFIG mode / IDLE`, tiles in landscape, own package hidden | PASS | screenshot (not stored in repo) |
+| `mode=vehicle`, `apps.pinned=settings,chrome`, `apps.hidden=youtube` via `run-as` | PASS: banner `VEHICLE mode / WAIT_USB`, Settings and Chrome first, YouTube absent | screenshot |
+| Invalid config (`mode=turbo`, unknown key, bad number) | PASS: no crash, falls back to CONFIG mode, banner shows `config errors: 3` | screenshot |
+| Tapping a tile launches that app | PASS (Calendar launched; ActivityTaskManager START in logcat). First tap at wrong coordinates (portrait/landscape mix-up) hit nothing. | logcat |
+| `diagnostics.sh` device path | PASS on emulator: collected 13 files; model `sdk_gphone64_x86_64` correctly produced the "not SM-G975F/N" warning | output |
+| Becomes the default HOME app | NOT TESTED (HOME key went to the stock launcher) | – |
+| USB attach/detach events driving the policy | NOT TESTED (USB_STATE is a protected broadcast; no emulated USB) | – |
+
 ## Acceptance criteria
 
 Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hardware, logs, open issues.
@@ -43,13 +59,13 @@ Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hard
 | ID | Requirement | State | Evidence | Date | Hardware | Open issues |
 |----|-------------|-------|----------|------|----------|-------------|
 | AC-01 | LineageOS boots on the S10+ | NOT TESTED | – | – | none | ROM never built: host has 39 GB RAM / 189 GB disk vs 64 GB / 400 GB required (research/lineageos.md) |
-| AC-02 | Own services start automatically | NOT TESTED | Launcher APK builds and verifies; BootReceiver/ConnectionService never run | – | none | ConnectionService does not yet drive a native session (CP-008) |
+| AC-02 | Own services start automatically | NOT TESTED on target | Emulator: service starts when the launcher opens and stays foreground. BOOT_COMPLETED start not tested | – | none | ConnectionService does not yet drive a native session (CP-008) |
 | AC-03 | Radio detects device as CarPlay over USB | NOT TESTED | – | – | none | Role switch / VBUS back-feed on the S10 Type-C stack unknown (research/usb-feasibility.md) |
 | AC-04 | Session established | NOT TESTED | iAP2 + AirPlay sequencers pass against fake peers only | 2026-11-14 | none | Protocol facts come from one third-party document measured on one car |
 | AC-05 | Android video transmitted | NOT TESTED | Frame/AVCC/AES-CTR primitives tested; no encoder, no VirtualDisplay | – | none | MEDIA-001 not started |
 | AC-06 | Audio transmitted | NOT TESTED | RTP packetizer tested only | – | none | no capture path |
 | AC-07 | Touch input works | NOT TESTED | coordinate scaling + HID report edges unit-tested | – | none | HID descriptor parser missing; no injection into Android |
-| AC-08 | Launcher opens apps | NOT TESTED | APK built; tile ordering unit-tested; UI never run | 2026-11-14 | none | could be run on an emulator image (not done) |
+| AC-08 | Launcher opens apps | PARTIAL (emulator) | tile tap launched Calendar; ordering/hiding verified by screenshot | 2026-11-14 | Android Emulator API 36 | not on S10+/LineageOS; not tested from the head unit touch screen |
 | AC-09 | No need to touch the phone screen in normal use | NOT TESTED | – | – | none | needs AC-01..07 |
 | AC-10 | Auto-reconnect after unplug | NOT TESTED | ConnectionPolicy backoff logic unit-tested | 2026-11-14 | none | policy only; no real USB events or session |
 | AC-11 | Works with phone screen off | NOT TESTED | – | – | none | – |
