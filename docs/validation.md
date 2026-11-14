@@ -107,6 +107,27 @@ Not shown: capture on the S10+ audio HAL; whether REMOTE_SUBMIX works there; cap
 
 Not shown: any USB/CDC-NCM link, IPv6 link-local dialling, mDNS, a real head unit or any traffic with a real phone; the Android native service (JNI/foreground service) that would run this runner next to the encoder, injector and audio capture; stalled-socket handling (the 2 s send timeout exists but is not exercised); multi-hour behaviour.
 
+### CP-008 Android native sender on the emulator -> fake car on the host (2026-11-14)
+
+`libs10carplay.so` (NDK r26, C++17, built for x86_64 and arm64-v8a; only x86_64 was run) hosts Client + SessionRunner on a native thread inside `ProjectionService`; Java feeds it live H.264 from the VirtualDisplay encoder and a synthetic 440 Hz tone (test fixture, not capture). The fake head unit runs on the host (`fake_car_server`, all interfaces for about 30 s); the emulator dials it at 10.0.2.2. Script: `tests/integration/emulator_carplay.sh`.
+
+| Observed | Result |
+|---|---|
+| Control sequence at the fake car, over the emulator's network | SETUP /setup, GET /info, RECORD, modesChanged 2/1, 1/1, SETUP screen, SETUP audio, then modesChanged 1/2 after the car's borrow request |
+| Live video | 184 frames of a real Settings session decrypted correctly at the car; config 1200x512; 0 frames dropped in the native queue |
+| Audio | 2 990 RTP packets in 22 s (about 136/s) |
+| Housekeeping | 22 feedbacks, 23 UDP keepalives |
+| Car -> phone | 4 event requests, 4 replies; touch down/up arrived in Java as (1199, 511); keyframe request reached the encoder |
+
+Bugs found by this run, all fixed:
+1. `socket()` failed inside the app: the manifest lacked `INTERNET` (status line `failed: timing socket`).
+2. A Java exception inside a JNI callback left pending made the next JNI call abort the whole process (CheckJNI). Callbacks now clear pending exceptions.
+3. The car's first commands arrived before the encoder existed (NPE in `requestKeyFrame`). The pipeline is now started before the car session is dialled, and `requestKeyFrame` tolerates a missing codec.
+
+Also: SHA-512 and AES-128-CTR are now dependency-free (`crypto_portable`), because the NDK has no libcrypto; verified against OpenSSL on 300 digests and 100 CTR streams (counter carry, full 128-bit wrap, random chunking) plus FIPS vectors and the OrangeCar golden key/IV (`test_crypto_xcheck`).
+
+Not shown: anything on the S10+ or with the arm64 build (compiled only); USB/NCM/IPv6/mDNS (the "car" is TCP/UDP over the emulator NAT); the host-to-phone UDP timing request (not routable through the emulator NAT; covered by the loopback test); privileged capture and injection inside this service (touch is only logged; audio is synthetic); a real head unit.
+
 ## Acceptance criteria
 
 Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hardware, logs, open issues.

@@ -17,7 +17,7 @@ public final class H264Encoder {
 
     private final int width, height, fps, bitrate;
     private final Sink sink;
-    private MediaCodec codec;
+    private volatile MediaCodec codec;
     private Thread thread;
     private volatile boolean running;
     private byte[] config = new byte[0];
@@ -38,10 +38,11 @@ public final class H264Encoder {
         f.setInteger(MediaFormat.KEY_LATENCY, 1);
         f.setInteger(MediaFormat.KEY_PRIORITY, 0);                       // realtime
         f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000);  // idle screen still produces frames
-        codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-        codec.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        Surface s = codec.createInputSurface();
-        codec.start();
+        MediaCodec c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+        c.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        Surface s = c.createInputSurface();
+        c.start();
+        codec = c;
         running = true;
         thread = new Thread(this::drain, "s10-h264-drain");
         thread.start();
@@ -50,9 +51,11 @@ public final class H264Encoder {
 
     /** Ask for an IDR (car sent forceKeyFrame/requestUI). */
     public void requestKeyFrame() {
+        MediaCodec c = codec;
+        if (c == null) return;   // not started yet: the first frame is an IDR anyway
         Bundle b = new Bundle();
         b.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0);
-        try { codec.setParameters(b); } catch (IllegalStateException ignored) { /* stopping */ }
+        try { c.setParameters(b); } catch (IllegalStateException ignored) { /* stopping */ }
     }
 
     public void stop() {

@@ -3,7 +3,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
-#include <openssl/evp.h>
+#include "crypto_portable.hpp"
 
 namespace s10::airplay {
 using bplist::Value;
@@ -255,27 +255,23 @@ std::vector<uint8_t> keepAliveBody() { return bplist::write(Value::Dict()); }
 // ---------------- cipher ----------------
 static std::array<uint8_t, 16> derive(const char* label, const std::string& id) {
     std::string in = std::string(label) + id + std::string(16, '\0');
-    unsigned char md[64]; unsigned int mdl = 0;
+    auto md = s10::crypto::sha512(reinterpret_cast<const uint8_t*>(in.data()), in.size());
     std::array<uint8_t, 16> out{};
-    if (EVP_Digest(in.data(), in.size(), md, &mdl, EVP_sha512(), nullptr) == 1) std::memcpy(out.data(), md, 16);
+    std::memcpy(out.data(), md.data(), 16);
     return out;
 }
 
 StreamCipher::StreamCipher(const std::string& id) {
     key_ = derive("AirPlayStreamKey", id);
     iv_ = derive("AirPlayStreamIV", id);
-    EVP_CIPHER_CTX* c = EVP_CIPHER_CTX_new();
-    if (c && EVP_EncryptInit_ex(c, EVP_aes_128_ctr(), nullptr, key_.data(), iv_.data()) == 1) ctx_ = c;
-    else if (c) EVP_CIPHER_CTX_free(c);
+    ctx_ = new s10::crypto::Aes128Ctr(key_.data(), iv_.data());
 }
-StreamCipher::~StreamCipher() { if (ctx_) EVP_CIPHER_CTX_free(static_cast<EVP_CIPHER_CTX*>(ctx_)); }
+StreamCipher::~StreamCipher() { delete static_cast<s10::crypto::Aes128Ctr*>(ctx_); }
 
 std::vector<uint8_t> StreamCipher::process(const uint8_t* d, size_t n) {
     std::vector<uint8_t> out(n);
-    if (!ctx_ || n == 0 || n > 0x7FFFFFFF) return n == 0 ? out : std::vector<uint8_t>{};
-    int outl = 0;
-    if (EVP_EncryptUpdate(static_cast<EVP_CIPHER_CTX*>(ctx_), out.data(), &outl, d, static_cast<int>(n)) != 1 ||
-        static_cast<size_t>(outl) != n) return {};
+    if (!ctx_ || n == 0) return out;
+    static_cast<s10::crypto::Aes128Ctr*>(ctx_)->process(d, out.data(), n);
     return out;
 }
 

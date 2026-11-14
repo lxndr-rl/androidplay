@@ -11,6 +11,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.SystemClock;
 import android.util.Log;
+import android.media.AudioFormat;
 import android.view.Surface;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -34,6 +35,9 @@ public final class ProjectionService extends Service {
     private BufferedOutputStream out;
     private long frames, keyFrames, bytes, firstKeyMs = -1, startMs, lastPtsUs;
     private long maxAuBytes;
+    private CarPlayNative car;
+    private volatile boolean audioRun;
+    private Thread audioThread;
 
     @Override public int onStartCommand(Intent i, int flags, int id) {
         NotificationManager nm = getSystemService(NotificationManager.class);
@@ -42,15 +46,29 @@ public final class ProjectionService extends Service {
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth).build());
         final int w = i.getIntExtra("w", 1200), h = i.getIntExtra("h", 512), fps = i.getIntExtra("fps", 30);
         final int kbps = i.getIntExtra("kbps", 3000), seconds = i.getIntExtra("seconds", 10);
+        final String carHost = i.getStringExtra("host");
+        final int carPort = i.getIntExtra("port", 0);
         try {
             out = new BufferedOutputStream(new FileOutputStream(new File(getFilesDir(), "out.h264")));
             startMs = SystemClock.elapsedRealtime();
+            if (carHost != null && carPort > 0) {
+                // CarPlay mode: access units go to the native sender instead of a file.
+                car = new CarPlayNative(new CarPlayNative.Listener() {
+                    @Override public void onTouch(int kind, int x, int y) { Log.i(TAG, "touch kind=" + kind + " x=" + x + " y=" + y); }
+                    @Override public void onKeyFrameRequested() { Log.i(TAG, "keyframe requested"); if (encoder != null) encoder.requestKeyFrame(); }
+                });
+            }
             encoder = new H264Encoder(w, h, fps, kbps * 1000, this::onAu);
             Surface s = encoder.start();
             display = getSystemService(DisplayManager.class).createVirtualDisplay("s10caros", w, h, 160, s,
                     DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY);
             if (display == null) throw new IOException("createVirtualDisplay returned null");
             Log.i(TAG, "display=" + display.getDisplay().getDisplayId() + " size=" + w + "x" + h);
+            if (car != null) {   // pipeline is up: only now let the car session begin
+                car.start(carHost, carPort);
+                Log.i(TAG, "carplay target " + carHost + ":" + carPort);
+                startSyntheticAudio();
+            }
             handler.postDelayed(() -> finish(w, h, fps, kbps, seconds), seconds * 1000L);
         } catch (Exception e) {
             Log.e(TAG, "start failed", e);
@@ -63,10 +81,36 @@ public final class ProjectionService extends Service {
         frames++; bytes += au.length; lastPtsUs = ptsUs;
         if (au.length > maxAuBytes) maxAuBytes = au.length;
         if (key) { keyFrames++; if (firstKeyMs < 0) firstKeyMs = SystemClock.elapsedRealtime() - startMs; }
+        if (car != null) car.pushVideo(au);
         try { out.write(au); } catch (IOException e) { Log.e(TAG, "write", e); }
     }
 
+    /** TEST FIXTURE: 440 Hz synthetic tone as 10 ms chunks, paced in real time. This is NOT system-audio capture. */
+    private void startSyntheticAudio() {
+        audioRun = true;
+        audioThread = new Thread(() -> {
+            final int rate = 48000, frames = rate / 100;
+            byte[] chunk = new byte[frames * 4];
+            long n = 0, next = SystemClock.elapsedRealtime();
+            while (audioRun) {
+                for (int i = 0; i < frames; i++, n++) {
+                    short v = (short) (8000 * Math.sin(2 * Math.PI * 440 * n / rate));
+                    chunk[4 * i] = chunk[4 * i + 2] = (byte) v;
+                    chunk[4 * i + 1] = chunk[4 * i + 3] = (byte) (v >> 8);
+                }
+                car.pushAudio(chunk, chunk.length);
+                next += 10;
+                long d = next - SystemClock.elapsedRealtime();
+                if (d > 0) SystemClock.sleep(d);
+            }
+        }, "s10-synth-audio");
+        audioThread.start();
+    }
+
     private void finish(int w, int h, int fps, int kbps, int seconds) {
+        audioRun = false;
+        if (audioThread != null) try { audioThread.join(500); } catch (InterruptedException ignored) { }
+        if (car != null) { Log.i(TAG, "carplay status: " + car.status()); }
         if (display != null) display.release();
         encoder.stop();
         synchronized (this) {
@@ -78,6 +122,7 @@ public final class ProjectionService extends Service {
             catch (IOException e) { Log.e(TAG, "metrics", e); }
             Log.i(TAG, "done " + json);
         }
+        if (car != null) { car.close(); car = null; }
         stopSelf();
     }
 
