@@ -29,7 +29,11 @@ struct Value {
     static Value Array() { Value x; x.t = T::Array; return x; }
     static Value Dict() { Value x; x.t = T::Dict; return x; }
 
-    Value& set(const std::string& k, Value v) { m.emplace_back(k, std::move(v)); return *this; }
+    Value& set(const std::string& k, Value v) {
+        for (auto& kv : m) if (kv.first == k) { kv.second = std::move(v); return *this; }
+        m.emplace_back(k, std::move(v));
+        return *this;
+    }
     Value& push(Value v) { a.push_back(std::move(v)); return *this; }
     const Value* get(const std::string& k) const {
         for (const auto& kv : m) if (kv.first == k) return &kv.second;

@@ -26,6 +26,15 @@ std::vector<uint8_t> buildOkReply(int cseq) {
     return std::vector<uint8_t>(s.begin(), s.end());
 }
 
+std::vector<uint8_t> buildReply(int status, int cseq, const std::vector<uint8_t>& body) {
+    std::string h = "RTSP/1.0 " + std::to_string(status) + (status == 200 ? " OK" : " Error") + "\r\nCSeq: " + std::to_string(cseq) + "\r\n";
+    if (!body.empty()) h += "Content-Type: application/x-apple-binary-plist\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
+    h += "\r\n";
+    std::vector<uint8_t> out(h.begin(), h.end());
+    out.insert(out.end(), body.begin(), body.end());
+    return out;
+}
+
 static std::string lower(std::string s) { for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }
 
 std::vector<RtspMessage> RtspParser::feed(const uint8_t* d, size_t n) {

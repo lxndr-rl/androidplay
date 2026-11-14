@@ -31,6 +31,8 @@ std::vector<uint8_t> buildRequest(const std::string& method, const std::string& 
                                   const std::vector<uint8_t>& body = {});
 // Reply on the event channel where the car is the requester: "RTSP/1.0 200 OK\r\nCSeq: n\r\n\r\n".
 std::vector<uint8_t> buildOkReply(int cseq);
+// 200 reply carrying a bplist body (used for changeModes answers, and by test receivers).
+std::vector<uint8_t> buildReply(int status, int cseq, const std::vector<uint8_t>& body);
 
 class RtspParser {   // incremental; handles both requests (car /command) and responses
 public:
