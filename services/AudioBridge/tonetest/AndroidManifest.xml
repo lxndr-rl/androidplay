@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.s10caros.tonetest">
+    <application android:label="S10CarOS tone test">
+        <!-- Test fixture: plays a 440 Hz tone. Never ship. -->
+        <activity android:name=".ToneActivity" android:exported="true" />
+    </application>
+</manifest>

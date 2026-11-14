@@ -80,6 +80,19 @@ Not shown, and not claimed:
 
 Not shown: injection by an unprivileged process (impossible: needs `INJECT_EVENTS`; the ROM must run this as a platform/system component); multi-touch; CarPlay HID report -> injector wiring; hidden-API reflection on other Android versions or on the S10+ LineageOS; latency.
 
+### MEDIA-002 audio on the emulator (2026-11-14, same AVD)
+
+`services/AudioBridge`: `CaptureMain` (app_process as shell uid, fake `com.android.shell` system Context, hidden `AudioRecord.Builder.setContext`, source REMOTE_SUBMIX, 48 kHz stereo 16-bit) + a tone-test APK (fixture, never ship). Host side: `AudioPacer` in CarPlayService (sample-clock pacing at 352 frames/packet, silence after 200 ms starvation, bounded buffer).
+
+| Check | Result | Evidence |
+|---|---|---|
+| Capture 5 s while an app plays 440 Hz | 960 000 bytes = exactly 5.000 s; dominant frequency 440 Hz (Goertzel 141.9 vs 0.0 at 300/600/1000 Hz) | `.build/capture.pcm`, `tests/integration/emulator_audio.sh` |
+| Level | RMS about 200 (peak 284) against a source amplitude of 12 000: heavily attenuated by the emulator's media volume. Not investigated. | analysis output |
+| 1 s of the real capture through `AudioPacer` + RTP packetizer | `test_audio_fixture`: 136 packets of 1408 B, bit-exact reconstruction of the capture (BE to LE), no silence, 440 Hz preserved | ctest |
+| Pacing logic | `test_airplay_audio`: 136 packets per second of live input, bounded latency (drops oldest whole frames), no zeros on short gaps, zeros after 200 ms starvation, sequence numbers continuous | ctest |
+
+Not shown: capture on the S10+ audio HAL; whether REMOTE_SUBMIX works there; capture of other streams (telephony, alert); per-app playback capture without privileges (needs MediaProjection or privileged permission; the ROM must run this as a system component); latency and A/V sync with the video; sending the packets to anything.
+
 ## Acceptance criteria
 
 Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hardware, logs, open issues.
@@ -91,7 +104,7 @@ Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hard
 | AC-03 | Radio detects device as CarPlay over USB | NOT TESTED | – | – | none | Role switch / VBUS back-feed on the S10 Type-C stack unknown (research/usb-feasibility.md) |
 | AC-04 | Session established | NOT TESTED | iAP2 + AirPlay sequencers pass against fake peers only | 2026-11-14 | none | Protocol facts come from one third-party document measured on one car |
 | AC-05 | Android video transmitted | NOT TESTED (to the radio) | Android side: VirtualDisplay + MediaCodec produce a decodable 1200x512 baseline stream on the emulator; stream passes the AirPlay framing/AES-CTR path in a host test | 2026-11-14 | Android Emulator API 36 | nothing sent over USB/network; encoder not run on S10+; phone-screen capture without consent unresolved |
-| AC-06 | Audio transmitted | NOT TESTED | RTP packetizer tested only | – | none | no capture path |
+| AC-06 | Audio transmitted | NOT TESTED (to the radio) | Android side: system audio captured (440 Hz verified) on the emulator; capture passes the pacing/RTP path bit-exactly in a host test | 2026-11-14 | Android Emulator API 36 | nothing sent to a radio; S10+ HAL untested; capture needs privileges; no A/V sync measurement |
 | AC-07 | Touch input works | NOT TESTED (from the radio) | Android side: injected touch changed the content of a virtual display, seen in the encoded stream (emulator); HID edge/scaling unit-tested | 2026-11-14 | Android Emulator API 36 | no HID descriptor parser; no wiring CarPlay -> injector; injector needs privileges; single touch only |
 | AC-08 | Launcher opens apps | PARTIAL (emulator) | tile tap launched Calendar; ordering/hiding verified by screenshot | 2026-11-14 | Android Emulator API 36 | not on S10+/LineageOS; not tested from the head unit touch screen |
 | AC-09 | No need to touch the phone screen in normal use | NOT TESTED | – | – | none | needs AC-01..07 |
