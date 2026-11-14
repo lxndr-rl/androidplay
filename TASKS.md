@@ -16,3 +16,6 @@ Status: TODO / RUNNING / DONE(evidence) / BLOCKED. Initial seed; agents append e
 | MEDIA-001 | D | VirtualDisplay+MediaCodec H.264 service | ROM-001 | TODO | – | – |
 | UX-001 | E | Headless CarLauncher | – | TODO | – | – |
 | QA-001 | F | Test plan + diagnostics.sh | – | TODO | – | – |
+
+## Discrepancies (resolve by evidence)
+- DISC-001: B says no open sender-side CarPlay impl exists; G found OkCarLink (MIT, FunctionFS/usbmux/lockdown, Android module) and OrangeCar (GPL-3, docs/protocol.md wired sender handshake). Action: orchestrator to read both sources/docs directly and decide; update CP-001 and CP-002. Status: OPEN.
