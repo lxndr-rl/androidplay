@@ -46,3 +46,10 @@ Binaries built with NDK 26.1 (aarch64, API 29): `usb/GadgetManager/src/ffs_probe
 
 ## Radio (user-reported, not verified by us)
 Generic Android-style head unit, Allwinner SoC, 1 GB RAM; works with an iPhone over USB cable (user statement). Model unknown. Whether its USB port is host-only, which CarPlay app/stack it runs, and whether it accepts a non-iPhone device: unknown.
+
+## USB-002: GadgetManager compose-into mode on the S10+ (2026-11-14)
+`gadget_manager --compose-into g1 setup|bind|teardown` (new mode; host tests 80/80) run on the phone with `tests/hardware/usb_gadget_manager_compose.sh` + `ffs_probe`. (V)
+- PC saw `bNumInterfaces 2` (adb + our FFS interface 255/0/0 with bulk 0x82/0x02); ep0 events BIND, UNBIND, BIND, ENABLE; UDC `configured`. After teardown and the sys.usb.config toggle: 1 interface, adb back.
+- Teardown's first unbind write returned `short write` (the kernel had already dropped the gadget after ffs_probe closed ep0); the code now ignores that write and still removes our link and function (host tests only; not re-run on the phone after that edit).
+- Still NOT shown: data over the endpoints, iAP2, Apple IDs, the radio. The script still toggles `sys.usb.config` to bring adb back; whether the USB HAL recovers without that toggle is untested.
+- User requirement (2026-11-14): the only requirement on the radio is that it has wired CarPlay. That is the design goal, not a verified compatibility claim.

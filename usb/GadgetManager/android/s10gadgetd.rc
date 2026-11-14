@@ -2,7 +2,8 @@
 # Install to /vendor/etc/init/s10gadgetd.rc (via PRODUCT_COPY_FILES in device/samsung/beyond2lte).
 # Prereq (code-backed): LineageOS exynos9820-common init.exynos9820.usb.rc already mounts /config
 # usb_gadget g1 and the USB gadget HAL (android.hardware.usb.gadget-service.samsung) owns UDC
-# 10c00000.dwc3. Only ONE gadget can hold the UDC, so we take over explicitly with --takeover g1.
+# 10c00000.dwc3. The S10+ kernel refuses a second ConfigFS gadget (mkdir -> ENOMEM, measured
+# 2026-11-14), so the service composes its FFS function into g1 with --compose-into g1.
 
 on post-fs-data
     mkdir /dev/usb-ffs/s10carplay 0770 system system
@@ -16,7 +17,7 @@ on boot
 # Disabled by default; start explicitly: `setprop sys.s10.carplay 1`.
 # NOTE: only configfs setup is implemented; the FFS ep0 serve loop (write descriptors, answer
 # role-switch requests via RoleSwitchHandler, then `bind`) is NOT implemented yet.
-service s10gadgetd /vendor/bin/gadget_manager --takeover g1 setup
+service s10gadgetd /vendor/bin/gadget_manager --compose-into g1 setup
     class late_start
     user system
     group system usb

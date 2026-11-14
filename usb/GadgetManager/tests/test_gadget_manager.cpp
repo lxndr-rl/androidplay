@@ -85,6 +85,52 @@ static void test_bind_without_udc_fails() {
     sh("rm -rf " + r);
 }
 
+static void test_compose_into_existing_gadget() {
+    std::string r = mktmp();
+    const std::string g1 = "/config/usb_gadget/g1";
+    mk(r + g1 + "/functions/ffs.adb"); mk(r + g1 + "/configs/b.1"); mk(r + "/sys/class/udc/10c00000.dwc3");
+    touch(r + g1 + "/UDC", "10c00000.dwc3\n");
+    touch(r + g1 + "/idVendor", "0x04e8\n");
+    sh("ln -s " + r + g1 + "/functions/ffs.adb " + r + g1 + "/configs/b.1/function0");
+    Fs fs; fs.root = r; fs.create_attrs = true;
+    GadgetConfig c; c.compose_into = "g1";
+    GadgetManager m(fs, c);
+    CHECK(m.gadget_path() == g1);
+    CHECK(m.composing());
+    CHECK(m.setup());
+    CHECK(fs.exists(g1 + "/functions/ffs.carplay"));
+    CHECK(!fs.exists("/config/usb_gadget/s10carplay"));          // no second gadget
+    CHECK(fs.read(g1 + "/idVendor") == "0x04e8");                 // identity untouched
+    CHECK(fs.read(g1 + "/UDC") == "10c00000.dwc3");              // setup does not touch the bind
+    fs.log.clear();
+    CHECK(m.bind());
+    // order on the wire: unbind, link, rebind to the same UDC
+    CHECK(fs.log.size() == 3);
+    CHECK(fs.log[0].find("g1/UDC <- '\\n'") != std::string::npos);
+    CHECK(fs.log[1].find("configs/b.1/s10_carplay") != std::string::npos);
+    CHECK(fs.log[2].find("g1/UDC <- '10c00000.dwc3'") != std::string::npos);
+    CHECK(fs.exists(g1 + "/configs/b.1/s10_carplay"));
+    CHECK(fs.exists(g1 + "/configs/b.1/function0"));              // adb function kept
+    CHECK(fs.read(g1 + "/UDC") == "10c00000.dwc3");
+    CHECK(m.bind());                                              // idempotent
+    CHECK(m.teardown());
+    CHECK(!fs.exists(g1 + "/configs/b.1/s10_carplay"));
+    CHECK(!fs.exists(g1 + "/functions/ffs.carplay"));
+    CHECK(fs.exists(g1 + "/functions/ffs.adb"));
+    CHECK(fs.exists(g1 + "/configs/b.1/function0"));
+    CHECK(fs.read(g1 + "/UDC") == "10c00000.dwc3");              // given back to the system
+    sh("rm -rf " + r);
+}
+
+static void test_compose_dry_run() {
+    Fs fs; fs.dry_run = true;
+    GadgetConfig c; c.compose_into = "g1";
+    GadgetManager m(fs, c);
+    CHECK(m.setup()); CHECK(m.bind()); CHECK(m.teardown());
+    CHECK(!fs.exists("/config/usb_gadget"));
+    for (auto& l : fs.log) CHECK(l.find("s10carplay") == std::string::npos || l.find("ffs.") == std::string::npos);
+}
+
 static void test_ffs_blobs() {
     FfsInterface i; i.eps = {{0x81, 2, 64, 512}, {0x02, 2, 64, 512}};
     auto d = build_ffs_descriptors({i});
@@ -130,6 +176,8 @@ int main() {
     test_setup_bind_teardown_fake_tree();
     test_takeover_unbinds_g1_first();
     test_bind_without_udc_fails();
+    test_compose_into_existing_gadget();
+    test_compose_dry_run();
     test_ffs_blobs();
     test_role_switch_sequence();
     printf("%d checks, %d failures\n", checks, fails);

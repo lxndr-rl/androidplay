@@ -106,8 +106,15 @@ bool GadgetManager::release_takeover() {
     return fs_.write(u, "\n");
 }
 
+static std::string link_name(const FfsFunction& f) { return "s10_" + f.instance; }
+
 bool GadgetManager::setup() {
     const std::string g = gadget_path();
+    if (composing()) {  // only create the functions; linking needs the gadget unbound (bind())
+        bool ok = true;
+        for (auto& f : cfg_.ffs) ok &= fs_.mkdir(g + "/functions/ffs." + f.instance);
+        return ok;
+    }
     const std::string cfgdir = g + "/configs/b.1";
     bool ok = true;
     ok &= fs_.mkdir(g);
@@ -135,6 +142,18 @@ bool GadgetManager::bind(const std::string& udc) {
     std::string u = udc.empty() ? pick_udc() : udc;
     if (u.empty() && !fs_.dry_run) { fs_.log.push_back("ERR no UDC found in " + cfg_.udc_dir); return false; }
     if (u.empty()) u = "<udc>";
+    if (composing()) {
+        // The host sees a re-enumeration; the pre-existing functions (adb) come back with it.
+        const std::string g = gadget_path();
+        if (!fs_.dry_run) {
+            std::string cur = fs_.read(g + "/UDC");
+            if (!cur.empty()) u = cur;  // keep the UDC the gadget was already bound to
+        }
+        bool ok = fs_.write(g + "/UDC", "\n");
+        for (auto& f : cfg_.ffs)
+            ok &= fs_.symlink(g + "/functions/ffs." + f.instance, g + "/configs/b.1/" + link_name(f));
+        return ok & fs_.write(g + "/UDC", u);
+    }
     if (!release_takeover()) return false;
     return fs_.write(gadget_path() + "/UDC", u);
 }
@@ -143,6 +162,17 @@ bool GadgetManager::unbind() { return fs_.write(gadget_path() + "/UDC", "\n"); }
 
 bool GadgetManager::teardown() {
     const std::string g = gadget_path();
+    if (composing()) {  // remove only what we added, then give the gadget back to the system
+        std::string u = fs_.dry_run ? "<udc>" : fs_.read(g + "/UDC");
+        // The kernel may already have dropped the gadget when the FFS daemon closed ep0, in
+        // which case this write fails (seen on the S10+); cleanup must go on regardless.
+        bool ok = true;
+        (void)fs_.write(g + "/UDC", "\n");
+        for (auto& f : cfg_.ffs) ok &= fs_.unlink(g + "/configs/b.1/" + link_name(f));
+        for (auto& f : cfg_.ffs) ok &= fs_.rmdir(g + "/functions/ffs." + f.instance);
+        if (!u.empty()) ok &= fs_.write(g + "/UDC", u);
+        return ok;
+    }
     const std::string cfgdir = g + "/configs/b.1";
     bool ok = true;
     if (fs_.dry_run || fs_.exists(g + "/UDC")) ok &= unbind();

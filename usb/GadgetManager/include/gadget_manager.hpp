@@ -46,6 +46,10 @@ struct GadgetConfig {
     unsigned max_power_ma = 500;
     std::vector<FfsFunction> ffs = {{"carplay"}};
     std::string takeover;           // existing gadget to unbind first ("g1")
+    // Samsung's kernel refuses a second ConfigFS gadget (mkdir -> ENOMEM, measured on the
+    // S10+, docs/hardware-evidence.md). When set, our FFS functions are composed into this
+    // existing gadget's config b.1 instead; its identity and other functions stay untouched.
+    std::string compose_into;       // "g1" on the S10+
 };
 
 class GadgetManager {
@@ -56,7 +60,10 @@ public:
     bool unbind();
     bool teardown();                           // unbind + remove everything
     std::string status() const;
-    std::string gadget_path() const { return cfg_.configfs + "/" + cfg_.name; }
+    std::string gadget_path() const {
+        return cfg_.configfs + "/" + (cfg_.compose_into.empty() ? cfg_.name : cfg_.compose_into);
+    }
+    bool composing() const { return !cfg_.compose_into.empty(); }
     std::string pick_udc() const;
 private:
     bool release_takeover();
