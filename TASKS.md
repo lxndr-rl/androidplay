@@ -13,7 +13,7 @@ Status: TODO / RUNNING / DONE(evidence) / BLOCKED. Initial seed; agents append e
 | CP-002 | B | Decide legit auth path | CP-001 | TODO | – | – |
 | CP-003 | B | Reusable service core + serialization tests | CP-001 | TODO | – | – |
 | RES-001 | G | Recover OkcarOS sources/inventory | – | DONE | research/okcaros-recovery.md | – |
-| MEDIA-001 | D | VirtualDisplay+MediaCodec H.264 service | ROM-001 | TODO | – | – |
+| MEDIA-001 | D | VirtualDisplay+MediaCodec H.264 service | ROM-001 | PARTIAL 2026-11-14: services/ProjectionService probe app; emulator run produced a valid decodable stream (ffprobe/ffmpeg), fixture test through AirPlay path passes. NOT done: wiring to CarPlay Client (CP-008), key-frame request test, audio (MEDIA-002), input injection (MEDIA-003), real screen capture without consent (needs ROM privileges), S10+ encoder | MEDIA-002 audio, MEDIA-003 input |
 | UX-001 | E | Headless CarLauncher | – | PARTIAL 2026-11-14: packages/CarLauncher: core (ConnectionPolicy, ModeConfig, AppFilter) host-tested; Android shell (LauncherActivity, BootReceiver, ConnectionService) builds to a signed APK (aapt2/d8/apksigner, minSdk 29) and ran on the API 36 emulator (found+fixed an FGS permission crash; config modes, pinning, hiding, tile launch verified), NEVER on an S10+. ConnectionService does not drive a native session yet. No settings app, no recovery UI, no screen-off handling | run on emulator image; CP-008 |
 | QA-001 | F | Test plan + diagnostics.sh | – | PARTIAL 2026-11-14: scripts/run-tests.sh (6/6 suites pass incl. CMake+ctest 5/5 under ASan/UBSan), scripts/diagnostics.sh (no-device path run; device path untested), docs/validation.md with AC-01..12 all NOT TESTED/PARTIAL | hardware runs |
 

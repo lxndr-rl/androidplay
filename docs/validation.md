@@ -52,6 +52,22 @@ Hardware/OS: Android Emulator, AVD `Medium_Phone_API_36.1` (x86_64, API 36 Googl
 | Becomes the default HOME app | NOT TESTED (HOME key went to the stock launcher) | – |
 | USB attach/detach events driving the policy | NOT TESTED (USB_STATE is a protected broadcast; no emulated USB) | – |
 
+### MEDIA-001 probe on the emulator (2026-11-14, same AVD, software encoder)
+
+`services/ProjectionService` (probe app, `build.sh apk`): app-owned public VirtualDisplay (1200x512, 160 dpi) fed to a MediaCodec H.264 baseline surface encoder; Android Settings launched onto that display with `am start --display`, scrolled with `input -d`.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Blank display produces no frames | observed: 0 frames in 12 s | expected: surface encoder only emits on content; idle-repeat needs a first frame |
+| Settings on the virtual display, 14 s | 141 AUs, 5 key frames, 350 093 B (about 200 kbps, about 10 fps on mostly static content), first IDR 1.7 s after start | `metrics.json` pulled with run-as |
+| Stream decodes | `ffprobe`: h264 Constrained Baseline, 1200x512, yuv420p, level 4.1, 141 frames; `ffmpeg` full decode without errors; frame 60 is a correct picture of the Settings app | ffprobe/ffmpeg output |
+| Through the AirPlay video path | `test_capture_fixture` (70-frame fixture, ctest): AU split, AVCC length prefixes tile each AU, SPS/PPS on every IDR, avcC built, AES-CTR round trip | `scripts/run-tests.sh` |
+
+Not shown, and not claimed:
+- The S10+ hardware encoder (Exynos) was never run; emulator numbers say nothing about its latency, fps, bitrate or thermals.
+- This is not the production capture path. A normal app only renders its own/launched content on its own display. Capturing the real phone screen without a consent dialog needs platform privileges in the ROM (a platform-signed service or a pre-granted MediaProjection/`CAPTURE_VIDEO_OUTPUT`-class permission): unresolved, ROM work.
+- `requestKeyFrame()` is written but was not exercised; no audio capture; no touch injection; 60 fps not tried.
+
 ## Acceptance criteria
 
 Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hardware, logs, open issues.
@@ -62,7 +78,7 @@ Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hard
 | AC-02 | Own services start automatically | NOT TESTED on target | Emulator: service starts when the launcher opens and stays foreground. BOOT_COMPLETED start not tested | – | none | ConnectionService does not yet drive a native session (CP-008) |
 | AC-03 | Radio detects device as CarPlay over USB | NOT TESTED | – | – | none | Role switch / VBUS back-feed on the S10 Type-C stack unknown (research/usb-feasibility.md) |
 | AC-04 | Session established | NOT TESTED | iAP2 + AirPlay sequencers pass against fake peers only | 2026-11-14 | none | Protocol facts come from one third-party document measured on one car |
-| AC-05 | Android video transmitted | NOT TESTED | Frame/AVCC/AES-CTR primitives tested; no encoder, no VirtualDisplay | – | none | MEDIA-001 not started |
+| AC-05 | Android video transmitted | NOT TESTED (to the radio) | Android side: VirtualDisplay + MediaCodec produce a decodable 1200x512 baseline stream on the emulator; stream passes the AirPlay framing/AES-CTR path in a host test | 2026-11-14 | Android Emulator API 36 | nothing sent over USB/network; encoder not run on S10+; phone-screen capture without consent unresolved |
 | AC-06 | Audio transmitted | NOT TESTED | RTP packetizer tested only | – | none | no capture path |
 | AC-07 | Touch input works | NOT TESTED | coordinate scaling + HID report edges unit-tested | – | none | HID descriptor parser missing; no injection into Android |
 | AC-08 | Launcher opens apps | PARTIAL (emulator) | tile tap launched Calendar; ordering/hiding verified by screenshot | 2026-11-14 | Android Emulator API 36 | not on S10+/LineageOS; not tested from the head unit touch screen |
