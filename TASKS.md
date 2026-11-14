@@ -14,8 +14,8 @@ Status: TODO / RUNNING / DONE(evidence) / BLOCKED. Initial seed; agents append e
 | CP-003 | B | Reusable service core + serialization tests | CP-001 | TODO | – | – |
 | RES-001 | G | Recover OkcarOS sources/inventory | – | DONE | research/okcaros-recovery.md | – |
 | MEDIA-001 | D | VirtualDisplay+MediaCodec H.264 service | ROM-001 | TODO | – | – |
-| UX-001 | E | Headless CarLauncher | – | TODO | – | – |
-| QA-001 | F | Test plan + diagnostics.sh | – | TODO | – | – |
+| UX-001 | E | Headless CarLauncher | – | PARTIAL 2026-11-14: packages/CarLauncher: core (ConnectionPolicy, ModeConfig, AppFilter) host-tested; Android shell (LauncherActivity, BootReceiver, ConnectionService) builds to a signed APK (aapt2/d8/apksigner, minSdk 29) but NEVER RUN. ConnectionService does not drive a native session yet. No settings app, no recovery UI, no screen-off handling | run on emulator image; CP-008 |
+| QA-001 | F | Test plan + diagnostics.sh | – | PARTIAL 2026-11-14: scripts/run-tests.sh (6/6 suites pass incl. CMake+ctest 5/5 under ASan/UBSan), scripts/diagnostics.sh (no-device path run; device path untested), docs/validation.md with AC-01..12 all NOT TESTED/PARTIAL | hardware runs |
 
 ## Discrepancies (resolve by evidence)
 - DISC-001: B says no open sender-side CarPlay impl exists; G found OkCarLink (MIT, FunctionFS/usbmux/lockdown, Android module) and OrangeCar (GPL-3, docs/protocol.md wired sender handshake). Action: orchestrator to read both sources/docs directly and decide; update CP-001 and CP-002. Status: RESOLVED 2026-11-14 for G. Evidence: gh api sbuysse/OrangeCar (GPL-3.0, pushed 2026-10-10) docs/protocol.md documents wired phone-side sequence (VID 05AC/PID 12A8, 0x53/0x51 role switch, iAP2, CDC-NCM, AirPlay session), measured on ONE car (Jaguar F-PACE/Harman), board is RK3588 not Android. B's claim was too strong: open sender-side spec exists; Android/S10 port and other radios unproven. C's USB evidence agrees with OrangeCar steps.

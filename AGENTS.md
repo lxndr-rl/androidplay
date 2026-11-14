@@ -17,7 +17,7 @@ Rules for all agents: no invented compat, no claimed untested results, cite URL 
 ## Integration contracts (draft, v0)
 - **USB↔CarPlay**: CarPlayService consumes byte-stream endpoints (bulk IN/OUT fds) from `usb/GadgetManager`; GadgetManager owns ConfigFS/FunctionFS setup.
 - **CarPlay↔Media**: ProjectionService emits H.264 Annex-B NAL units + PCM audio frames via local unix sockets; InputBridge receives normalized touch events (x,y in 0..1, action, pointer id).
-- **Config**: single JSON at `/data/vendor/s10caros/config.json`.
+- **Config**: `java.util.Properties` file (`config.properties`, app-private `files/` dir for now; keys in `ModeConfig`). Changed from JSON on 2026-11-14 so the pure-Java core is host-testable; vendor-partition location still TBD (SELinux).
 
 ## Conventions
 C/C++17, Rust 2021, Kotlin; 4-space indent; unit-testable core with no Android deps where possible; each task in TASKS.md has evidence link.
