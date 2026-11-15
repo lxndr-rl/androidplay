@@ -36,6 +36,9 @@ target_link_libraries(test_loopback_session iap2link pthread)
 add_test(NAME loopback_session COMMAND test_loopback_session
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/emulator_settings_1200x512.h264
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/emulator_tone440_48k_stereo_1s.pcm)
+add_executable(test_runner_ipv6 tests/test_runner_ipv6.cpp)
+target_link_libraries(test_runner_ipv6 iap2link pthread)
+add_test(NAME runner_ipv6 COMMAND test_runner_ipv6)
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)
   add_executable(test_crypto_xcheck tests/test_crypto_xcheck.cpp)
