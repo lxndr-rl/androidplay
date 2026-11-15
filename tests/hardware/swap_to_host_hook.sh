@@ -56,6 +56,8 @@ log "DESC $(od -An -tx1 -v $DEV/descriptors 2>/dev/null | tr -d '\n' | cut -c1-1
 for i in $DEV/*:*; do log "IFACE $(basename $i) class=$(cat $i/bInterfaceClass)/$(cat $i/bInterfaceSubClass)/$(cat $i/bInterfaceProtocol) eps=$(cat $i/bNumEndpoints) str='$(cat $i/interface 2>/dev/null)' drv=$(basename $(readlink $i/driver 2>/dev/null) 2>/dev/null)"; done
 
 # 3. the chain (everything runs "forever"; this supervisor stops it)
+AL0=$(wc -l < /data/local/tmp/airplay.log 2>/dev/null); AL0=${AL0:-0}   # lines before this attempt, to recognise OUR "streaming" line later
+up() { cut -d. -f1 /proc/uptime; }
 [ -x /data/local/tmp/usb_host_iap2 ] && /data/local/tmp/usb_host_iap2 $BUS $DEVNUM 86400 >> /data/local/tmp/iap.log 2>&1 &
 ( for k in 1 2 3 4 5 6 7 8 9 10; do ip link show eth0 >/dev/null 2>&1 && break; sleep 1; done
   ip -6 route replace fe80::/64 dev eth0 table 4242 2>>$L
@@ -70,12 +72,13 @@ PD=$(grep -o "display=[0-9]*" /data/local/tmp/projector.log | tail -1 | cut -d= 
 if [ -n "$PD" ]; then
   if pm path com.s10caros.launcher >/dev/null 2>&1; then
     appops set com.s10caros.launcher SYSTEM_ALERT_WINDOW allow
-    am start --display $PD -n com.s10caros.launcher/.app.LauncherActivity >> /data/local/tmp/proj.log 2>&1
+    am start --display $PD -n com.s10caros.launcher/.app.SplashActivity >> /data/local/tmp/proj.log 2>&1   # branded splash until the session streams
   else
     am start --display $PD -n com.android.settings/.Settings >> /data/local/tmp/proj.log 2>&1
   fi
   nohup sh -c "CLASSPATH=/data/local/tmp/inject.dex app_process / com.s10caros.input.shell.InjectMain --display $PD --size 1280 720 --listen 47600 < /data/local/tmp/touch.fifo >> /data/local/tmp/inject.log 2>&1" >/dev/null 2>&1 &
 fi
+SPLASH_T0=$(up); HOME_SHOWN=0
 
 # 4. supervise: the radio device must stay (same device number) and the sender must stay alive
 GONE=0; DEAD=0
@@ -86,4 +89,13 @@ while :; do
   [ $GONE -ge 2 ] && { cleanup "radio USB device gone"; exit 0; }
   if [ -z "$(pidof carplay_phone)" ] && [ -z "$(pidof usb_host_iap2)" ]; then DEAD=$((DEAD+1)); else DEAD=0; fi
   [ $DEAD -ge 20 ] && { cleanup "sender and iAP2 link both ended"; exit 0; }
+  # splash -> launcher: once the session streams (and the splash was up for at least 3 s), or after 45 s regardless
+  if [ $HOME_SHOWN = 0 ] && [ -n "$PD" ]; then
+    AGE=$(( $(up) - SPLASH_T0 ))
+    STREAMING=0; tail -n +$((AL0+1)) /data/local/tmp/airplay.log 2>/dev/null | grep -q "client state=2" && STREAMING=1
+    if { [ $STREAMING = 1 ] && [ $AGE -ge 3 ]; } || [ $AGE -ge 45 ]; then
+      am start --display $PD -n com.s10caros.launcher/.app.LauncherActivity >> /data/local/tmp/proj.log 2>&1
+      log "launcher shown (streaming=$STREAMING, splash age ${AGE}s)"; HOME_SHOWN=1
+    fi
+  fi
 done
