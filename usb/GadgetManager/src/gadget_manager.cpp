@@ -261,7 +261,7 @@ Ep0Result RoleSwitchHandler::handle(const SetupPacket& p) {
     if (p.type == 0xC0 && p.request == 0x53 && p.length >= 4) {
         r.action = Ep0Action::Reply;
         r.data = {1, 0, 0, 0};
-        if (state_ == Idle) state_ = Probed;
+        state_ = Probed;  // every new probe starts a fresh attempt (the radio retries every ~25 s)
     } else if (p.type == 0x40 && p.request == 0x51 && p.value == 1 && state_ == Probed) {
         r.action = Ep0Action::Ack;
         r.role_switch_requested = true;

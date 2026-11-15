@@ -2,7 +2,7 @@
 # OPT-IN experiment (LEGAL-001 decision 2026-11-14: own radio only, never shipped).
 # Presents Apple's USB identity (05ac:12a8) with an FFS function composed into g1 and serves ep0 with ffs_probe:
 # answers C0 53 with 01 00 00 00, acknowledges 40 51 WITHOUT swapping roles, logs every setup request.
-# Run as root on the phone, detached:  APPLE_ID_OK=own_radio_only [PROBE_MODE=noeps|clone] [SOLE=1] radio_c053_probe.sh [seconds]
+# Run as root on the phone, detached:  APPLE_ID_OK=own_radio_only [PROBE_MODE=noeps|clone] [SOLE=1] [SWAP=1] radio_c053_probe.sh [seconds]
 # A watchdog restores the stock ids (04e8:685d samsung/SM-G975F) and adb even if the main flow dies.
 [ "$APPLE_ID_OK" = own_radio_only ] || { echo "refused: set APPLE_ID_OK=own_radio_only"; exit 1; }
 DUR=${1:-600}
@@ -29,7 +29,7 @@ echo "start $(date +%T) udc=$(cat $G/UDC)"
 $D/radio_observe.sh $((DUR+30)) >/dev/null 2>&1 &
 sleep 3
 $GM setup; echo "setup_rc=$?"
-$D/ffs_probe carplay $DUR $PROBE_MODE > $D/c053_events.log 2>&1 &
+S10_SWAP_HOOK=$([ "$SWAP" = 1 ] && echo $D/swap_to_host_hook.sh) $D/ffs_probe carplay $DUR $PROBE_MODE > $D/c053_events.log 2>&1 &
 FP=$!; sleep 2; echo "ffs: $(head -1 $D/c053_events.log)"
 $GM bind; echo "bind_rc=$?"
 sleep 3

@@ -98,7 +98,13 @@ int main(int argc, char** argv) {
             Ep0Result r = h.handle(sp);
             // Probe only: answer like the doc (reply/ack), never swap roles here.
             if (r.action == Ep0Action::Reply) { (void)!write(ep0, r.data.data(), r.data.size()); printf(" -> reply"); }
-            else if (r.action == Ep0Action::Ack) { (void)!read(ep0, nullptr, 0); printf(" -> ack(role switch NOT performed)"); }
+            else if (r.action == Ep0Action::Ack) {
+                (void)!read(ep0, nullptr, 0);
+                // S10_SWAP_HOOK: optional external script run in the background after the ack (hardware experiment).
+                const char* hook = getenv("S10_SWAP_HOOK");
+                if (r.role_switch_requested && hook && *hook) { std::string c = std::string(hook) + " &"; (void)!system(c.c_str()); printf(" -> ack, swap hook started"); }
+                else printf(" -> ack(role switch NOT performed)");
+            }
             else { (void)!(sp.type & 0x80 ? read(ep0, nullptr, 0) : write(ep0, nullptr, 0)); printf(" -> stall"); }
         }
         printf("\n"); fflush(stdout);
