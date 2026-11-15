@@ -141,3 +141,12 @@ Device enumerated by the phone's xHCI (phone = host, power_role sink): `1f3a:100
 - IAD + interface 1: class `02/0d/00` ("CDC Network Control Model (NCM)"), 1 interrupt IN endpoint `0x84`, CDC functional descriptors (union, NCM, ethernet MAC string); interface 2: class `0a/00/01` ("CDC Network Data"), bulk IN `0x82`, bulk OUT `0x02`, 2 alt settings.
 - The phone's kernel bound `cdc_ncm` and registered `eth0` (MAC `62:a0:38:25:e8:a2`, 425 Mbit/s). This is the radio-side NCM gadget of the CarPlay IP link.
 Not done: iAP2 over interface 0 (endpoints 0x81/0x01), IPv6/mDNS/AirPlay over eth0.
+
+## Radio observation 9: FIRST iAP2 CONTACT with the radio (2026-11-14) [V]
+Run: phone host on port B, `usb_host_iap2` (services/CarPlayService/src/usb_host_iap2.cpp: DeviceSession/Driver from CP-004/005 over usbfs bulk 0x81/0x01). Raw: diagnostics-radiolog12/iap.log (gitignored).
+- [V] The radio sent the iAP2 start-of-link bytes `ff 55 02 00 ee 10`; we echoed them. Radio SYN (`ff 5a 00 17 80 ...`) -> our SYN|ACK. The radio's link parameters: max outstanding 0x7f? (as parsed by CP-004), session table 3 entries.
+- [V] Identification: the radio sent IdentificationInformation (name "zlink", model "zlink3", manufacturer "zjinnova", serial "0123456789A01234", versions "1.0.0"). Our driver accepted it.
+- [V] Authentication: the radio sent a 908-byte certificate message; we requested the challenge; the radio answered with 128 bytes whose leading bytes are all zero. Our driver does NOT verify certificate/signature (documented design); we do not know whether the zeros are a real signature or padding of a missing MFi chip (Zlink strings say "Err: Mfi chip not available"). The driver reported success and sent DeviceInformationUpdate "iPhone" and DeviceLanguageUpdate "en"; the radio acked them.
+- [V] After the burst the radio sent nothing for ~35 s, then the bus died (RX error errno 71) at the end of the radio's attempt.
+- [V] eth0 (cdc_ncm) came up with link-local IPv6 `fe80::cc34:a1af:6ea5:4f`; no IPv6 neighbor/route was visible 6 s after the device appeared.
+- Not known: what the radio waits for after the burst (candidates: mDNS/AirPlay over eth0; an iAP2 message our driver did not send; the radio's accept list gating). Next: mDNS probe on eth0, then AirPlay client over IPv6 link-local.
