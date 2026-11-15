@@ -16,7 +16,11 @@ import android.view.Surface;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 
 /**
  * Probe service: creates an app-owned public VirtualDisplay backed by an H.264 encoder, records for N seconds to
@@ -36,6 +40,10 @@ public final class ProjectionService extends Service {
     private long frames, keyFrames, bytes, firstKeyMs = -1, startMs, lastPtsUs;
     private long maxAuBytes;
     private CarPlayNative car;
+    // Loopback sink (hardware bring-up): length-prefixed (4 bytes BE) Annex-B access units to a root process on 127.0.0.1;
+    // a single byte 'K' coming back means "the car asked for a key frame".
+    private volatile DataOutputStream sinkOut;
+    private Socket sinkSock;
     private volatile boolean audioRun;
     private Thread audioThread;
 
@@ -48,6 +56,8 @@ public final class ProjectionService extends Service {
         final int kbps = i.getIntExtra("kbps", 3000), seconds = i.getIntExtra("seconds", 10);
         final String carHost = i.getStringExtra("host");
         final int carPort = i.getIntExtra("port", 0);
+        final String sink = i.getStringExtra("sink");          // "127.0.0.1:47500"
+        if (sink != null) startSink(sink);
         try {
             out = new BufferedOutputStream(new FileOutputStream(new File(getFilesDir(), "out.h264")));
             startMs = SystemClock.elapsedRealtime();
@@ -77,11 +87,40 @@ public final class ProjectionService extends Service {
         return START_NOT_STICKY;
     }
 
+    private void startSink(final String hp) {
+        Thread t = new Thread(() -> {
+            String[] p = hp.split(":");
+            for (int attempt = 0; attempt < 60 && sinkOut == null; attempt++) {
+                try {
+                    Socket sk = new Socket();
+                    sk.connect(new InetSocketAddress(p[0], Integer.parseInt(p[1])), 1000);
+                    sk.setTcpNoDelay(true);
+                    sinkSock = sk;
+                    sinkOut = new DataOutputStream(new java.io.BufferedOutputStream(sk.getOutputStream(), 1 << 16));
+                    Log.i(TAG, "sink connected " + hp);
+                    if (encoder != null) encoder.requestKeyFrame();
+                    InputStream in = sk.getInputStream();
+                    int b;
+                    while ((b = in.read()) >= 0) { if (b == 'K' && encoder != null) { Log.i(TAG, "sink asked for a key frame"); encoder.requestKeyFrame(); } }
+                    Log.i(TAG, "sink closed by peer");
+                    sinkOut = null;
+                } catch (IOException e) { SystemClock.sleep(500); }
+            }
+        }, "s10-sink");
+        t.setDaemon(true);
+        t.start();
+    }
+
     private synchronized void onAu(byte[] au, boolean key, long ptsUs) {
         frames++; bytes += au.length; lastPtsUs = ptsUs;
         if (au.length > maxAuBytes) maxAuBytes = au.length;
         if (key) { keyFrames++; if (firstKeyMs < 0) firstKeyMs = SystemClock.elapsedRealtime() - startMs; }
         if (car != null) car.pushVideo(au);
+        DataOutputStream so = sinkOut;
+        if (so != null) {
+            try { so.writeInt(au.length); so.write(au); so.flush(); }
+            catch (IOException e) { Log.w(TAG, "sink write failed, dropping the sink: " + e); sinkOut = null; }
+        }
         try { out.write(au); } catch (IOException e) { Log.e(TAG, "write", e); }
     }
 
@@ -123,6 +162,8 @@ public final class ProjectionService extends Service {
             Log.i(TAG, "done " + json);
         }
         if (car != null) { car.close(); car = null; }
+        try { if (sinkSock != null) sinkSock.close(); } catch (IOException ignored) { }
+        sinkOut = null;
         stopSelf();
     }
 

@@ -8,6 +8,8 @@ L=/data/local/tmp/swap.log; O=/sys/devices/platform/10c00000.usb/10c00000.dwc3; 
 mkdir /data/local/tmp/swap.lock 2>/dev/null || exit 0
 t() { cut -d' ' -f1 /proc/uptime; }
 snap() { echo "$(t) $1 id=$(cat $O/id) state=$(cat $O/state) udc=$(cat /sys/class/udc/*/state 2>&1 | head -1) dr=$(cat $P/data_role) pr=$(cat $P/power_role) usbdevs=$(ls /sys/bus/usb/devices 2>/dev/null | tr '\n' ',')" >> $L; }
+svc power stayon true; locksettings set-disabled true >/dev/null 2>&1; input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard
+logcat -c
 dmesg -c >/dev/null 2>&1
 for f in iap mdns airplay; do echo "=== attempt at uptime $(t) ===" >> /data/local/tmp/$f.log; done
 snap before
@@ -23,11 +25,12 @@ dump_dev() { d=$1
 }
 for i in $(seq 1 ${HOLD:-420}); do sleep 1; snap hold$i; case $i in 1|10|40|80|120) portsc;; esac
   for d in /sys/bus/usb/devices/*; do
-    [ -f $d/idVendor ] && [ "$(cat $d/idVendor)" != 1d6b ] && { echo "$(t) DEV $(basename $d) $(cat $d/idVendor):$(cat $d/idProduct) '$(cat $d/manufacturer 2>/dev/null)'/'$(cat $d/product 2>/dev/null)' ifs=$(cat $d/bNumInterfaces 2>/dev/null) speed=$(cat $d/speed 2>/dev/null)" >> $L; [ $DUMPED = 0 ] && { sleep 2; dump_dev $d; DUMPED=1; if [ -x /data/local/tmp/usb_host_iap2 ]; then /data/local/tmp/usb_host_iap2 $(cat $d/busnum) $(cat $d/devnum) 400 >> /data/local/tmp/iap.log 2>&1 & fi; ( sleep 4; [ -x /data/local/tmp/mdns_probe ] && /data/local/tmp/mdns_probe eth0 30 >> /data/local/tmp/mdns.log 2>&1; ) & ( sleep 4; for k in 1 2 3 4 5 6 7 8 9 10; do ip link show eth0 >/dev/null 2>&1 && break; sleep 1; done; ip -6 route replace fe80::/64 dev eth0 table 4242 2>>$L; ip -6 rule del pref 17001 2>/dev/null; ip -6 rule add pref 17001 iif lo oif eth0 lookup 4242 2>>$L; echo "$(t) eth0 policy route installed: $(ip -6 rule | grep 17001)" >> $L; [ -x /data/local/tmp/carplay_phone ] && /data/local/tmp/carplay_phone eth0 400 /data/local/tmp/fix.h264 /data/local/tmp/fix.pcm >> /data/local/tmp/airplay.log 2>&1 ) & sleep 6; ( echo "--- ip addr"; ip addr; echo "--- ip -6 route"; ip -6 route; echo "--- neigh"; ip -6 neigh ) >> /data/local/tmp/ip.log 2>&1; }; }
+    [ -f $d/idVendor ] && [ "$(cat $d/idVendor)" != 1d6b ] && { echo "$(t) DEV $(basename $d) $(cat $d/idVendor):$(cat $d/idProduct) '$(cat $d/manufacturer 2>/dev/null)'/'$(cat $d/product 2>/dev/null)' ifs=$(cat $d/bNumInterfaces 2>/dev/null) speed=$(cat $d/speed 2>/dev/null)" >> $L; [ $DUMPED = 0 ] && { sleep 2; dump_dev $d; DUMPED=1; if [ -x /data/local/tmp/usb_host_iap2 ]; then /data/local/tmp/usb_host_iap2 $(cat $d/busnum) $(cat $d/devnum) 400 >> /data/local/tmp/iap.log 2>&1 & fi; ( sleep 4; [ -x /data/local/tmp/mdns_probe ] && /data/local/tmp/mdns_probe eth0 30 >> /data/local/tmp/mdns.log 2>&1; ) & ( sleep 4; for k in 1 2 3 4 5 6 7 8 9 10; do ip link show eth0 >/dev/null 2>&1 && break; sleep 1; done; ip -6 route replace fe80::/64 dev eth0 table 4242 2>>$L; ip -6 rule del pref 17001 2>/dev/null; ip -6 rule add pref 17001 iif lo oif eth0 lookup 4242 2>>$L; echo "$(t) eth0 policy route installed: $(ip -6 rule | grep 17001)" >> $L; [ -x /data/local/tmp/carplay_phone ] && /data/local/tmp/carplay_phone eth0 400 /data/local/tmp/fix.h264 /data/local/tmp/fix.pcm 47500 >> /data/local/tmp/airplay.log 2>&1 ) & ( sleep 9; input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard; am start-foreground-service -n com.s10caros.projection/.ProjectionService --ei w 1280 --ei h 720 --ei fps 30 --ei kbps 4000 --ei seconds 400 --es sink 127.0.0.1:47500 >> /data/local/tmp/proj.log 2>&1; sleep 4; PD=$(logcat -d -s S10CarOS-PROJ | grep -o "display=[0-9]*" | tail -1 | cut -d= -f2); echo "$(t) projection display=$PD" >> $L; [ -n "$PD" ] && am start --display $PD -n com.android.settings/.Settings >> /data/local/tmp/proj.log 2>&1 ) & sleep 6; ( echo "--- ip addr"; ip addr; echo "--- ip -6 route"; ip -6 route; echo "--- neigh"; ip -6 neigh ) >> /data/local/tmp/ip.log 2>&1; }; }
   done
 done
 for d in /sys/bus/usb/devices/[0-9]*-[0-9]*:*; do echo "IF $(basename $d) class=$(cat $d/bInterfaceClass)/$(cat $d/bInterfaceSubClass)/$(cat $d/bInterfaceProtocol) eps=$(cat $d/bNumEndpoints)" >> $L; done
 dmesg | grep -iE "usb [0-9]|new .*speed|device descriptor|enumerat|cdc|ncm|iap|otg_on|vbus|set_host|dr_set" | tail -40 >> $L
+am force-stop com.s10caros.projection
 ip -6 rule del pref 17001 2>/dev/null
 echo 1 > $O/id; echo "$(t) wrote id=1 rc=$?" >> $L
 sleep 3; snap after

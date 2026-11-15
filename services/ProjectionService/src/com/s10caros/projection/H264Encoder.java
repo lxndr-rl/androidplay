@@ -26,27 +26,40 @@ public final class H264Encoder {
         this.width = width; this.height = height; this.fps = fps; this.bitrate = bitrateBps; this.sink = sink;
     }
 
-    /** Creates the codec and returns the input surface to hand to a VirtualDisplay. */
+    /** Creates the codec and returns the input surface to hand to a VirtualDisplay.
+     *  Vendor encoders (Exynos on the S10+) reject some optional keys: try progressively plainer configurations. */
     public Surface start() throws IOException {
-        MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height);
-        f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        f.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
-        f.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-        f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-        f.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline);
-        f.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0);
-        f.setInteger(MediaFormat.KEY_LATENCY, 1);
-        f.setInteger(MediaFormat.KEY_PRIORITY, 0);                       // realtime
-        f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000);  // idle screen still produces frames
-        MediaCodec c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-        c.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        Surface s = c.createInputSurface();
-        c.start();
-        codec = c;
-        running = true;
-        thread = new Thread(this::drain, "s10-h264-drain");
-        thread.start();
-        return s;
+        IOException last = null;
+        for (int level = 0; level < 4; level++) {
+            MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height);
+            f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+            f.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+            f.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+            f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+            // 0: baseline + repeat-previous-frame, 1: repeat only, 2: baseline only, 3: plain. (LATENCY/PRIORITY/MAX_B_FRAMES
+            // are rejected by the Exynos encoder on the S10+: configure error -2147479551 with all of them set.)
+            if (level == 0 || level == 2) f.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline);
+            if (level == 0 || level == 1) f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000);   // idle screen still produces frames
+            MediaCodec c = null;
+            try {
+                c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+                c.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                Surface s = c.createInputSurface();
+                c.start();
+                codec = c;
+                running = true;
+                thread = new Thread(this::drain, "s10-h264-drain");
+                thread.start();
+                android.util.Log.i("S10CarOS-PROJ", "encoder " + c.getName() + " configured at level " + level + " " + width + "x" + height);
+                return s;
+            } catch (RuntimeException e) {
+                String d = (e instanceof MediaCodec.CodecException) ? ((MediaCodec.CodecException) e).getDiagnosticInfo() : "";
+                android.util.Log.w("S10CarOS-PROJ", "encoder level " + level + " rejected: " + e + " " + d);
+                last = new IOException("encoder rejected level " + level, e);
+                if (c != null) { try { c.release(); } catch (RuntimeException ignored) { } }
+            }
+        }
+        throw last;
     }
 
     /** Ask for an IDR (car sent forceKeyFrame/requestUI). */
@@ -67,9 +80,16 @@ public final class H264Encoder {
 
     private void drain() {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+        long lastLog = System.currentTimeMillis(); int tryAgain = 0, fmt = 0, outs = 0;
         while (running) {
             int i;
-            try { i = codec.dequeueOutputBuffer(info, 100_000); } catch (IllegalStateException e) { return; }
+            try { i = codec.dequeueOutputBuffer(info, 100_000); }
+            catch (RuntimeException e) { android.util.Log.e("S10CarOS-PROJ", "dequeueOutputBuffer failed: " + e); return; }
+            if (i == MediaCodec.INFO_TRY_AGAIN_LATER) tryAgain++; else if (i < 0) fmt++; else outs++;
+            if (System.currentTimeMillis() - lastLog > 2000) {
+                android.util.Log.i("S10CarOS-PROJ", "encoder drain: outputs=" + outs + " tryAgain=" + tryAgain + " other=" + fmt);
+                lastLog = System.currentTimeMillis();
+            }
             if (i < 0) continue;   // timeout / format change / buffers changed
             byte[] data = new byte[info.size];
             codec.getOutputBuffer(i).position(info.offset);
