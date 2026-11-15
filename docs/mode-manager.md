@@ -1,7 +1,14 @@
 # Mode manager: iPhone mode without the PC and ADB without a reboot (design, 2026-11-15)
 
-Status: **DESIGN. Nothing in this document is implemented or tested yet.** It is written from the evidence in
-`docs/hardware-evidence.md`. Implementation must be done with the phone on the PC (adb alive) and in small, reversible steps.
+Status (2026-11-15): **v1 implemented in `scripts/device/s10carosd.sh`, bench-tested with a simulated probe, NOT yet tested with a real radio.**
+Differences from the first design, learned on the bench: (1) the root cause of the "off the bus until reboot" failures was a bug in
+`GadgetManager::teardown` (fixed, regression test); (2) the PC never recovers a phone that shows Apple ids until the cable is
+replugged (the PC port wedges: "device descriptor read error -110"), so a PC must never see Apple ids; (3) therefore the default state
+is ADB with our FunctionFS function composed next to adb, and CARPLAY (Apple ids) is entered only when a head unit probes us.
+v1 triggers: AOA probe `c0 33` (Zlink). Chevrolet: no trigger known (it sends `c0 53` only after it sees Apple ids).
+v1 returns to ADB: session ended, cable gone while waiting, or 25 s without a radio request. No boot hook (this Lineage has no
+`userinit`): the daemon is started with `scripts/device/s10carosd.sh start` from a root shell; after a reboot the phone is a plain
+adb phone (safe default).
 
 ## Problem
 1. Today "iPhone mode" is started by hand from the PC (`radio_c053_probe.sh` pushed and launched with adb root). The product
