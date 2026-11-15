@@ -80,6 +80,7 @@ int main(int argc, char** argv) {
     printf("READY descriptors=%zu strings=%zu echo=%d\n", d.size(), s.size(), echo);
     fflush(stdout);
     RoleSwitchHandler h;
+    const bool sweep = getenv("S10_REPLY_SWEEP") && *getenv("S10_REPLY_SWEEP") == '1';
     struct timespec t0; clock_gettime(CLOCK_MONOTONIC, &t0);
     for (;;) {
         struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
@@ -96,6 +97,14 @@ int main(int argc, char** argv) {
             SetupPacket sp = parse_setup(ev.setup);
             printf(" setup type=%02x req=%02x val=%04x idx=%04x len=%u", sp.type, sp.request, sp.value, sp.index, sp.length);
             Ep0Result r = h.handle(sp);
+            // Experiment (S10_REPLY_SWEEP=1): a radio that sends C0 53 but never follows with 40 51 may want a different answer.
+            // Every other C0 53 gets the known-good 01 00 00 00 (so Zlink still works); the odd ones walk a list of variants.
+            if (sweep && sp.type == 0xC0 && sp.request == 0x53 && r.action == Ep0Action::Reply) {
+                static const uint8_t V[][4] = {{0,0,0,0},{2,0,0,0},{3,0,0,0},{1,1,0,0},{0,0,0,1},{1,0,0,1},{0xff,0xff,0xff,0xff},{4,0,0,0},{8,0,0,0},{0x10,0,0,0},{1,2,3,4},{1,0,1,0}};
+                static unsigned n = 0, k = 0;
+                if (n++ % 2 == 1) { unsigned i = k++ % (sizeof V / sizeof V[0]); r.data.assign(V[i], V[i] + 4); printf(" [sweep variant %u = %02x %02x %02x %02x]", i, V[i][0], V[i][1], V[i][2], V[i][3]); }
+                else printf(" [baseline 01 00 00 00]");
+            }
             // Probe only: answer like the doc (reply/ack), never swap roles here.
             if (r.action == Ep0Action::Reply) { (void)!write(ep0, r.data.data(), r.data.size()); printf(" -> reply"); }
             else if (r.action == Ep0Action::Ack) {

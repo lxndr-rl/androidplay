@@ -29,7 +29,7 @@ public final class Projector {
     // DisplayManager.VIRTUAL_DISPLAY_FLAG_* values (hidden ones are plain ints on purpose)
     private static final int PUBLIC = 1 << 0, PRESENTATION = 1 << 1, OWN_CONTENT_ONLY = 1 << 3, SUPPORTS_TOUCH = 1 << 6,
             ROTATES_WITH_CONTENT = 1 << 7, DESTROY_CONTENT_ON_REMOVAL = 1 << 8, TRUSTED = 1 << 10, OWN_DISPLAY_GROUP = 1 << 11,
-            ALWAYS_UNLOCKED = 1 << 12, TOUCH_FEEDBACK_DISABLED = 1 << 13, OWN_FOCUS = 1 << 14;
+            ALWAYS_UNLOCKED = 1 << 12, SHOW_SYSTEM_DECORATIONS = 1 << 9, TOUCH_FEEDBACK_DISABLED = 1 << 13, OWN_FOCUS = 1 << 14;
 
     private static volatile DataOutputStream out;
     private static volatile H264Encoder encoder;
@@ -50,6 +50,7 @@ public final class Projector {
         final int fps = Integer.parseInt(a[3]), kbps = Integer.parseInt(a[4]), port = Integer.parseInt(a[5]);
         final int seconds = a.length > 6 ? Integer.parseInt(a[6]) : 3600;
         final int audioPort = a.length > 7 ? Integer.parseInt(a[7]) : 0;
+        final boolean decor = a.length > 8 && a[8].equals("decor");   // experiment: let the IME / system decorations live on this display
         if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
         Class<?> at = Class.forName("android.app.ActivityThread");
         Object thread = at.getMethod("systemMain").invoke(null);
@@ -71,16 +72,98 @@ public final class Projector {
         Surface s = enc.start();
         int flags = PUBLIC | PRESENTATION | OWN_CONTENT_ONLY | SUPPORTS_TOUCH | ROTATES_WITH_CONTENT | DESTROY_CONTENT_ON_REMOVAL
                 | TRUSTED | OWN_DISPLAY_GROUP | ALWAYS_UNLOCKED | TOUCH_FEEDBACK_DISABLED | OWN_FOCUS;
+        if (decor) flags |= SHOW_SYSTEM_DECORATIONS;
         VirtualDisplay vd = dm.createVirtualDisplay("s10caros", w, h, dpi, s, flags);
         if (vd == null) { System.err.println("createVirtualDisplay returned null"); System.exit(1); }
         int id = vd.getDisplay().getDisplayId();
+        setImeLocal(id);
+        keepAwake(ctx, id);
+        panelOff();
         Log.i(TAG, "display=" + id + " size=" + w + "x" + h + " flags=0x" + Integer.toHexString(flags));
         System.out.println("display=" + id);
         System.out.flush();
         Thread.sleep(seconds * 1000L);
+        panelOn();
         vd.release();
         enc.stop();
         System.exit(0);
+    }
+
+    /** IME policy LOCAL (0): the soft keyboard is shown on this display instead of falling back to the phone's screen. */
+    private static void setImeLocal(int displayId) {
+        try {
+            Object sm = Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "window");
+            Object wm = Class.forName("android.view.IWindowManager$Stub").getMethod("asInterface", android.os.IBinder.class).invoke(null, sm);
+            wm.getClass().getMethod("setDisplayImePolicy", int.class, int.class).invoke(wm, displayId, 0);
+            Log.i(TAG, "IME policy LOCAL set on display " + displayId);
+        } catch (Throwable t) { Log.w(TAG, "setDisplayImePolicy failed: " + t + " cause=" + t.getCause()); }
+    }
+
+    /**
+     * The phone's own screen is useless in the car (and broken here): let it sleep. A sleeping phone also puts the
+     * virtual display's group to sleep unless that group is woken again, so wake THIS display's group once a second
+     * (PowerManager.wakeUp(time, reason, details, displayId) is hidden) and hold a partial wake lock for the CPU.
+     */
+    private static void keepAwake(final Context ctx, final int displayId) {
+        final android.os.PowerManager pm = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        try { android.os.PowerManager.WakeLock wl = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "s10caros:projector"); wl.setReferenceCounted(false); wl.acquire(); }
+        catch (Throwable t) { Log.w(TAG, "partial wake lock failed: " + t); }
+        Thread th = new Thread(new Runnable() {
+            @Override public void run() {
+                Method wake;
+                try { wake = android.os.PowerManager.class.getMethod("wakeUp", long.class, int.class, String.class, int.class); }
+                catch (Throwable t) { Log.w(TAG, "PowerManager.wakeUp(displayId) unavailable: " + t); return; }
+                boolean logged = false;
+                for (;;) {
+                    try { wake.invoke(pm, android.os.SystemClock.uptimeMillis(), 2 /* WAKE_REASON_APPLICATION */, "s10caros", displayId); if (!logged) { Log.i(TAG, "keeping display group of " + displayId + " awake"); logged = true; } }
+                    catch (Throwable t) { if (!logged) { Log.w(TAG, "wakeUp failed: " + t + " cause=" + t.getCause()); logged = true; } }
+                    try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
+                }
+            }
+        }, "s10-keepawake");
+        th.setDaemon(true);
+        th.start();
+    }
+
+    private static final int POWER_MODE_OFF = 0, POWER_MODE_NORMAL = 2;
+    private static volatile Object panelToken;
+
+    /**
+     * Turns the phone's physical panel off WITHOUT putting the device (or the projected display) to sleep, like
+     * scrcpy --turn-screen-off: SurfaceControl.setDisplayPowerMode on the physical display token. The token API
+     * moved between Android versions, so several lookups are tried; failure is logged, never fatal.
+     */
+    private static void panelOff() {
+        try {
+            Object token = null;
+            Class<?> sc = Class.forName("android.view.SurfaceControl");
+            try {
+                long[] ids = (long[]) sc.getMethod("getPhysicalDisplayIds").invoke(null);
+                token = sc.getMethod("getPhysicalDisplayToken", long.class).invoke(null, ids[0]);
+                Log.i(TAG, "panel token via SurfaceControl");
+            } catch (ReflectiveOperationException first) {
+                Log.i(TAG, "SurfaceControl token API missing (" + first + "), trying DisplayControl");
+                // DisplayControl lives in services.jar (not on the boot classpath); its natives come from libandroid_servers.
+                ClassLoader cl = new dalvik.system.DexClassLoader("/system/framework/services.jar", null, null, ClassLoader.getSystemClassLoader());
+                Class<?> dc = cl.loadClass("com.android.server.display.DisplayControl");
+                Method load = Runtime.class.getDeclaredMethod("loadLibrary0", Class.class, String.class);
+                load.setAccessible(true);
+                load.invoke(Runtime.getRuntime(), dc, "android_servers");
+                long[] ids = (long[]) dc.getMethod("getPhysicalDisplayIds").invoke(null);
+                token = dc.getMethod("getPhysicalDisplayToken", long.class).invoke(null, ids[0]);
+                Log.i(TAG, "panel token via DisplayControl");
+            }
+            panelToken = token;
+            sc.getMethod("setDisplayPowerMode", android.os.IBinder.class, int.class).invoke(null, token, POWER_MODE_OFF);
+            Log.i(TAG, "physical panel powered off");
+        } catch (Throwable t) { Log.w(TAG, "panelOff failed: " + t + " cause=" + t.getCause()); }
+    }
+
+    private static void panelOn() {
+        try {
+            Object tk = panelToken;
+            if (tk != null) Class.forName("android.view.SurfaceControl").getMethod("setDisplayPowerMode", android.os.IBinder.class, int.class).invoke(null, tk, POWER_MODE_NORMAL);
+        } catch (Throwable ignored) { }
     }
 
     private static void connectSink(final int port) {

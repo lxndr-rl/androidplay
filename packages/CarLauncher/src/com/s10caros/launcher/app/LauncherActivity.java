@@ -2,9 +2,11 @@ package com.s10caros.launcher.app;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -16,10 +18,12 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.GridLayout;
+import android.view.ViewOutlineProvider;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextClock;
 import android.widget.TextView;
 import com.s10caros.launcher.core.AppFilter;
@@ -28,25 +32,34 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * Car home screen for a 1280x720 head unit: big clock, a row of favourites, every other app in a grid.
- * Programmatic UI (no resource files). All sizes are dp so it also looks right on the phone's own display.
- * Dark theme, one accent colour, large touch targets (>= 76 dp) and press feedback; no hover/long-press UI.
+ * Car home screen modelled on the CarPlay layout: a slim sidebar (clock, date, link status) and a paged grid of large
+ * rounded app icons with the name underneath, page dots at the bottom. Only apps worth having in a car are listed:
+ * everything the user installed, plus a short allow-list of system apps (config.properties apps.pinned goes first,
+ * apps.hidden removes). Programmatic UI, dp-based, dark theme, one accent colour, touch targets >= 120 dp.
  */
 public final class LauncherActivity extends Activity {
-    // palette
-    private static final int BG_TOP = Color.parseColor("#0C1424"), BG_BOTTOM = Color.parseColor("#04070D");
-    private static final int SURFACE = Color.parseColor("#172033"), SURFACE_PRESSED = Color.parseColor("#26385A");
+    private static final int BG_TOP = Color.parseColor("#0B1322"), BG_BOTTOM = Color.parseColor("#03060C");
+    private static final int SIDEBAR = Color.parseColor("#0A101C"), TILE = Color.parseColor("#182236"), TILE_PRESSED = Color.parseColor("#2A3D63");
     private static final int STROKE = Color.parseColor("#26324A"), ACCENT = Color.parseColor("#4FD1C5");
     private static final int TEXT = Color.parseColor("#F2F6FF"), MUTED = Color.parseColor("#8FA3C7");
-    /** Shown first when installed and nothing is pinned in config.properties. */
-    private static final List<String> PRESET_FAVOURITES = Arrays.asList(
-            "org.smarttube.stable", "com.xuper.netxxus", "com.google.android.apps.youtube.music", "com.android.settings");
+    /** System apps that make sense in a car; user-installed apps are always shown. */
+    private static final Set<String> SYSTEM_ALLOW = new HashSet<>(Arrays.asList(
+            "com.android.settings", "org.lineageos.jelly", "org.lineageos.twelve", "com.android.chrome",
+            "com.google.android.apps.maps", "com.google.android.youtube", "com.google.android.apps.youtube.music"));
+    private static final List<String> DEFAULT_ORDER = Arrays.asList(
+            "org.smarttube.stable", "com.xuper.netxxus", "org.lineageos.twelve", "org.lineageos.jelly", "com.android.settings");
+    private static final int COLS = 4, ROWS = 2;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView status;
+    private LinearLayout dots;
+    private HorizontalScrollView pager;
+    private int pageCount = 1, pageWidth = 1;
     private float d;
     private final Runnable refresh = new Runnable() {
         @Override public void run() { status.setText(Status.line); handler.postDelayed(this, 1500); }
@@ -58,65 +71,79 @@ public final class LauncherActivity extends Activity {
         super.onCreate(b);
         d = getResources().getDisplayMetrics().density;
         ConnectionService.start(this);
-        // On the projected display the head unit has no Back/Home: show the floating bar (the activity is in the
-        // foreground here, which is what lets an app start the overlay service).
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        // On the projected display the head unit has no Back/Home: show the floating bar (this activity is in the
+        // foreground, which is what lets an app start the overlay service).
         android.view.Display shown = getDisplay();
         if (shown != null && "s10caros".equals(shown.getName()))
             startService(new Intent(this, NavOverlayService.class).putExtra("display", shown.getDisplayId()));
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
 
         LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] {BG_TOP, BG_BOTTOM});
-        root.setBackground(bg);
-        root.setPadding(dp(28), dp(14), dp(28), dp(86));   // bottom room for the floating Back/Home bar
+        root.setOrientation(LinearLayout.HORIZONTAL);
+        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] {BG_TOP, BG_BOTTOM}));
+        root.addView(sidebar(), new LinearLayout.LayoutParams(dp(176), ViewGroup.LayoutParams.MATCH_PARENT));
 
-        root.addView(header());
-
-        ScrollView sv = new ScrollView(this);
-        sv.setVerticalScrollBarEnabled(false);
-        sv.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        sv.addView(body, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout main = new LinearLayout(this);
+        main.setOrientation(LinearLayout.VERTICAL);
+        main.setPadding(dp(8), dp(18), dp(24), dp(84));   // bottom room for the floating Back/Home bar
+        pager = new HorizontalScrollView(this);
+        pager.setHorizontalScrollBarEnabled(false);
+        pager.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        LinearLayout pages = new LinearLayout(this);
+        pages.setOrientation(LinearLayout.HORIZONTAL);
+        pager.addView(pages, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        main.addView(pager, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        dots = new LinearLayout(this);
+        dots.setGravity(Gravity.CENTER);
+        main.addView(dots, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(22)));
+        root.addView(main, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         setContentView(root);
-        fill(body);
+
+        final LinearLayout pagesRef = pages;
+        main.post(new Runnable() { @Override public void run() { build(pagesRef); } });
+        // snap to the nearest page when the finger lifts
+        pager.setOnTouchListener(new View.OnTouchListener() {
+            @Override public boolean onTouch(View v, MotionEvent ev) {
+                if (ev.getActionMasked() == MotionEvent.ACTION_UP || ev.getActionMasked() == MotionEvent.ACTION_CANCEL)
+                    v.postDelayed(new Runnable() { @Override public void run() { snap(); } }, 40);
+                return false;
+            }
+        });
     }
 
-    private View header() {
-        LinearLayout h = new LinearLayout(this);
-        h.setOrientation(LinearLayout.HORIZONTAL);
-        h.setGravity(Gravity.CENTER_VERTICAL);
-        h.setPadding(0, 0, 0, dp(10));
+    private void snap() {
+        if (pageWidth <= 0) return;
+        int page = Math.max(0, Math.min(pageCount - 1, Math.round(pager.getScrollX() / (float) pageWidth)));
+        pager.smoothScrollTo(page * pageWidth, 0);
+        paintDots(page);
+    }
 
+    private View sidebar() {
+        LinearLayout s = new LinearLayout(this);
+        s.setOrientation(LinearLayout.VERTICAL);
+        s.setBackgroundColor(SIDEBAR);
+        s.setPadding(dp(20), dp(26), dp(14), dp(86));
         TextClock clock = new TextClock(this);
         clock.setFormat24Hour("HH:mm"); clock.setFormat12Hour("HH:mm");   // always 24 h
-        clock.setTextSize(52); clock.setTextColor(TEXT);
+        clock.setTextSize(44); clock.setTextColor(TEXT);
         clock.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
-        h.addView(clock);
-
-        LinearLayout dateBox = new LinearLayout(this);
-        dateBox.setOrientation(LinearLayout.VERTICAL);
-        dateBox.setPadding(dp(18), dp(8), 0, 0);
+        s.addView(clock);
         TextClock day = new TextClock(this);
         day.setFormat24Hour("EEEE"); day.setFormat12Hour("EEEE");
-        day.setTextSize(20); day.setTextColor(TEXT);
+        day.setTextSize(18); day.setTextColor(TEXT);
         day.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        s.addView(day);
         TextClock date = new TextClock(this);
         date.setFormat24Hour("d 'de' MMMM"); date.setFormat12Hour("d 'de' MMMM");
-        date.setTextSize(16); date.setTextColor(MUTED);
-        dateBox.addView(day); dateBox.addView(date);
-        h.addView(dateBox);
-
-        View spacer = new View(this);
-        h.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
-
-        status = new TextView(this);
-        status.setTextColor(MUTED); status.setTextSize(14); status.setGravity(Gravity.END);
-        status.setMaxWidth(dp(420));
-        h.addView(status);
-        return h;
+        date.setTextSize(15); date.setTextColor(MUTED);
+        s.addView(date);
+        View grow = new View(this);
+        s.addView(grow, new LinearLayout.LayoutParams(1, 0, 1f));
+        status = new TextView(this);   // kept for the refresh loop; deliberately not shown (debug text is not for the driver)
+        status.setVisibility(View.GONE);
+        s.addView(status);
+        return s;
     }
 
     private ModeConfig config() {
@@ -125,100 +152,111 @@ public final class LauncherActivity extends Activity {
         try (FileInputStream in = new FileInputStream(f)) { return ModeConfig.load(in); } catch (Exception e) { return ModeConfig.defaults(); }
     }
 
-    private void fill(LinearLayout body) {
+    private void build(LinearLayout pages) {
         PackageManager pm = getPackageManager();
         Intent q = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         List<AppFilter.Entry> all = new ArrayList<>();
         final java.util.Map<String, Drawable> icons = new java.util.HashMap<>();
         for (ResolveInfo ri : pm.queryIntentActivities(q, 0)) {
+            ApplicationInfo ai = ri.activityInfo.applicationInfo;
+            boolean system = (ai.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0;
+            if (system && !SYSTEM_ALLOW.contains(ri.activityInfo.packageName)) continue;   // recorder, camera, contacts... not for a car
             all.add(new AppFilter.Entry(ri.activityInfo.packageName, String.valueOf(ri.loadLabel(pm))));
             if (!icons.containsKey(ri.activityInfo.packageName)) icons.put(ri.activityInfo.packageName, ri.loadIcon(pm));
         }
         ModeConfig c = config();
-        List<String> pinned = c.pinned.isEmpty() ? PRESET_FAVOURITES : c.pinned;
-        List<AppFilter.Entry> arranged = AppFilter.arrange(all, pinned, c.hidden, getPackageName());
-        List<AppFilter.Entry> fav = new ArrayList<>(), rest = new ArrayList<>();
-        for (AppFilter.Entry e : arranged) (pinned.contains(e.pkg) && fav.size() < 4 ? fav : rest).add(e);
+        List<String> order = c.pinned.isEmpty() ? DEFAULT_ORDER : c.pinned;
+        List<AppFilter.Entry> apps = AppFilter.arrange(all, order, c.hidden, getPackageName());
 
-        if (!fav.isEmpty()) {
-            body.addView(sectionTitle("FAVORITOS"));
-            GridLayout g = new GridLayout(this);
-            g.setColumnCount(4);
-            for (AppFilter.Entry e : fav) g.addView(tile(e, icons.get(e.pkg), true));
-            body.addView(g);
+        pageWidth = pager.getWidth();
+        int pageHeight = pager.getHeight();
+        int perPage = COLS * ROWS;
+        pageCount = Math.max(1, (apps.size() + perPage - 1) / perPage);
+        for (int p = 0; p < pageCount; p++) {
+            LinearLayout page = new LinearLayout(this);
+            page.setOrientation(LinearLayout.VERTICAL);
+            page.setGravity(Gravity.CENTER_VERTICAL);
+            for (int r = 0; r < ROWS; r++) {
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                for (int col = 0; col < COLS; col++) {
+                    int i = p * perPage + r * COLS + col;
+                    View cell = i < apps.size() ? cell(apps.get(i), icons.get(apps.get(i).pkg)) : new View(this);
+                    row.addView(cell, new LinearLayout.LayoutParams(pageWidth / COLS, pageHeight / ROWS));
+                }
+                page.addView(row);
+            }
+            pages.addView(page, new LinearLayout.LayoutParams(pageWidth, pageHeight));
         }
-        if (!rest.isEmpty()) {
-            body.addView(sectionTitle("TODAS LAS APPS"));
-            GridLayout g = new GridLayout(this);
-            g.setColumnCount(5);
-            for (AppFilter.Entry e : rest) g.addView(tile(e, icons.get(e.pkg), false));
-            body.addView(g);
+        paintDots(0);
+    }
+
+    private void paintDots(int active) {
+        dots.removeAllViews();
+        if (pageCount <= 1) return;
+        for (int i = 0; i < pageCount; i++) {
+            View dot = new View(this);
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setColor(i == active ? TEXT : STROKE);
+            dot.setBackground(g);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(9), dp(9));
+            lp.setMargins(dp(6), 0, dp(6), 0);
+            dots.addView(dot, lp);
         }
     }
 
-    private TextView sectionTitle(String s) {
-        TextView t = new TextView(this);
-        t.setText(s); t.setTextColor(MUTED); t.setTextSize(13); t.setLetterSpacing(0.18f);
-        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        t.setPadding(dp(6), dp(14), 0, dp(8));
-        return t;
-    }
+    private View cell(final AppFilter.Entry e, Drawable icon) {
+        LinearLayout cell = new LinearLayout(this);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setGravity(Gravity.CENTER);
+        cell.setClickable(true);
 
-    private View tile(final AppFilter.Entry e, Drawable icon, boolean big) {
-        LinearLayout t = new LinearLayout(this);
-        t.setOrientation(LinearLayout.VERTICAL);
-        t.setGravity(Gravity.CENTER);
-        int pad = dp(big ? 14 : 8);
-        t.setPadding(pad, pad, pad, pad);
-        t.setBackground(tileBackground(big));
-        t.setClickable(true);
+        FrameLayout box = new FrameLayout(this);
+        box.setBackground(tileBackground());
+        box.setClipToOutline(true);
+        final float r = dp(30);
+        box.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), r); }
+        });
         ImageView iv = new ImageView(this);
         iv.setImageDrawable(icon);
-        int sz = dp(big ? 84 : 60);
-        t.addView(iv, new LinearLayout.LayoutParams(sz, sz));
+        box.addView(iv, new FrameLayout.LayoutParams(dp(84), dp(84), Gravity.CENTER));
+        cell.addView(box, new LinearLayout.LayoutParams(dp(132), dp(132)));
+
         TextView label = new TextView(this);
         label.setText(e.label);
         label.setTextColor(TEXT);
-        label.setTextSize(big ? 21 : 16);
+        label.setTextSize(19);
         label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         label.setGravity(Gravity.CENTER);
         label.setSingleLine(true);
         label.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        label.setPadding(0, dp(big ? 10 : 6), 0, 0);
-        t.addView(label, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        label.setPadding(dp(6), dp(10), dp(6), 0);
+        cell.addView(label, new LinearLayout.LayoutParams(dp(220), ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        int screenW = getResources().getDisplayMetrics().widthPixels - dp(56);
-        int cols = big ? 4 : 5, margin = dp(6);
-        GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-        lp.width = screenW / cols - 2 * margin;
-        lp.height = dp(big ? 164 : 112);
-        lp.setMargins(margin, margin, margin, margin);
-        t.setLayoutParams(lp);
-
-        // press feedback: slight shrink; the drawable state list handles the colour
-        t.setOnTouchListener(new View.OnTouchListener() {
+        cell.setOnTouchListener(new View.OnTouchListener() {
             @Override public boolean onTouch(View v, MotionEvent ev) {
                 int a = ev.getActionMasked();
-                if (a == MotionEvent.ACTION_DOWN) v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(80).start();
+                if (a == MotionEvent.ACTION_DOWN) v.animate().scaleX(0.94f).scaleY(0.94f).setDuration(80).start();
                 else if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) v.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
                 return false;
             }
         });
-        t.setOnClickListener(new View.OnClickListener() {
+        cell.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 Intent i = getPackageManager().getLaunchIntentForPackage(e.pkg);
                 if (i != null) startActivity(i);
             }
         });
-        return t;
+        return cell;
     }
 
-    private Drawable tileBackground(boolean big) {
-        float r = dp(big ? 24 : 20);
+    private Drawable tileBackground() {
         GradientDrawable normal = new GradientDrawable();
-        normal.setColor(SURFACE); normal.setCornerRadius(r); normal.setStroke(dp(1), STROKE);
+        normal.setColor(TILE); normal.setStroke(dp(1), STROKE);
         GradientDrawable pressed = new GradientDrawable();
-        pressed.setColor(SURFACE_PRESSED); pressed.setCornerRadius(r); pressed.setStroke(dp(2), ACCENT);
+        pressed.setColor(TILE_PRESSED); pressed.setStroke(dp(2), ACCENT);
         StateListDrawable s = new StateListDrawable();
         s.addState(new int[] {android.R.attr.state_pressed}, pressed);
         s.addState(new int[] {}, normal);
