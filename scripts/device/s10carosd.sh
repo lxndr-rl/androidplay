@@ -10,6 +10,7 @@
 #   * CARPLAY never lasts more than CARPLAY_GRACE seconds without a radio request and never outlives a session.
 #   * Only ids/strings change between states (no function add/remove, no HAL toggle).
 #   * A guard rebinds the UDC if it stays empty. Kill switch: touch /data/local/tmp/s10caros.off
+# env: FFS_MODE=clone|noeps (ffs_probe mode; default: ff/00/00 with two bulk endpoints)
 # usage: [NOSWITCH=1] [SOLE=1] [SWEEP=1] s10carosd.sh [start|stop|status]     (NOSWITCH=1: only log what it would do)
 D=/data/local/tmp; G=/config/usb_gadget/g1; T=/sys/kernel/tracing
 OFF=$D/s10caros.off; LOG=$D/s10carosd.log; PIDF=$D/s10carosd.pid; STATE=$D/s10carosd.state
@@ -41,7 +42,7 @@ ensure_composed() {   # $1 = force: also strip links Android added (accessory fu
   for l in $G/configs/b.1/*; do [ -L $l ] || continue; case "$(basename $l)" in function0) ;; *) log "removing foreign link $(basename $l)"; rm -f $l;; esac; done
   rm -f $G/configs/b.1/s10_carplay; rmdir $G/functions/ffs.carplay 2>/dev/null
   mkdir $G/functions/ffs.carplay
-  S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 > $D/ffs_events.log 2>&1 &
+  S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 $FFS_MODE > $D/ffs_events.log 2>&1 &
   sleep 2
   ln -s $G/functions/ffs.carplay $G/configs/b.1/s10_carplay
   [ -e $G/configs/b.1/function0 ] || ln -s $G/functions/ffs.adb $G/configs/b.1/function0
@@ -89,7 +90,7 @@ log "start: ids=$(cat $G/idVendor):$(cat $G/idProduct) udc=$(cat $G/UDC) serial_
 # matching ff/42/01, and when ours came first adb stopped seeing the phone (seen 2026-11-15, order flips after a cable cycle)
 # compose our function next to adb (FunctionFS must have its descriptors before the UDC is bound again)
 $D/gadget_manager --compose-into g1 setup >> $LOG 2>&1
-S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 > $D/ffs_events.log 2>&1 &
+S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 $FFS_MODE > $D/ffs_events.log 2>&1 &
 sleep 2
 $D/gadget_manager --compose-into g1 bind >> $LOG 2>&1
 echo adb > $STATE
@@ -100,7 +101,10 @@ kill_tracers
 echo 0 > $T/tracing_on 2>/dev/null; echo > $T/trace
 echo 1 > $T/events/dwc3/dwc3_ctrl_req/enable; echo 1 > $T/tracing_on
 rm -f $D/s10.aoa $D/s10.apple; : > $D/s10carosd.ctrl.log; CN=0
-( cat $T/trace_pipe | while read -r line; do
+( while :; do
+    [ -f $D/s10carosd.stop ] && exit 0
+    echo 1 > $T/events/dwc3/dwc3_ctrl_req/enable 2>/dev/null; echo 1 > $T/tracing_on 2>/dev/null
+    cat $T/trace_pipe | while read -r line; do
     case "$line" in
       *"c0 33 00 00 00 00 02 00"*) touch $D/s10.aoa; echo "$(cut -d' ' -f1 /proc/uptime) saw AOA probe c0 33" >> $LOG;;
       *"c0 53 00 00 00 00 04 00"*) touch $D/s10.apple; echo "$(cut -d' ' -f1 /proc/uptime) saw Apple probe c0 53" >> $LOG;;
@@ -109,6 +113,9 @@ rm -f $D/s10.aoa $D/s10.apple; : > $D/s10carosd.ctrl.log; CN=0
     case "$line" in
       *"dwc3_ctrl_req: "[0-9a-f][0-9a-f]" "[0-9a-f][0-9a-f]" "*) CN=$((CN+1)); [ $CN -le 400 ] && echo "$(cut -d' ' -f1 /proc/uptime) state=$(cat $STATE 2>/dev/null) ${line##*dwc3_ctrl_req: }" >> $D/s10carosd.ctrl.log;;
     esac
+  done
+    echo "$(cut -d' ' -f1 /proc/uptime) trace reader ended (EOF); restarting" >> $LOG
+    sleep 1
   done ) &
 TRACER=$!
 
