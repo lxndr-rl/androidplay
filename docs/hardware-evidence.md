@@ -133,3 +133,11 @@ Run: same probe, user connected to the radio's second USB port (from ~22:03 loca
 - Zlink UI on that port: "Connecting" then nothing, no "Link fail".
 - NOT yet captured: the device's interface classes/endpoints, descriptors, drivers bound, strings. The hook was extended to dump them on first sight (DESC/IFACE/SERIAL lines).
 - Not yet done: iAP2 identification over the radio's iAP2 interface, NCM host side, AirPlay session. Everything beyond the swap is unverified.
+
+## Radio observation 8: the radio's gadget descriptors; NCM already works on the phone (2026-11-14) [V]
+Run: same probe on radio port "B" (the second port), raw diagnostics-radiolog11/ (gitignored). Zlink UI on port A: "Link fail" (as before).
+Device enumerated by the phone's xHCI (phone = host, power_role sink): `1f3a:1007`, manufacturer/product "Android"/"Android", serial `20080411`, 1 configuration, bMaxPower 2 mA, high speed. Raw descriptor (hex) is in the log; decoded:
+- Interface 0: class `ff/f0/00`, string "iAP Interface", 2 endpoints: bulk IN `0x81`, bulk OUT `0x01`, 512 bytes. No kernel driver bound on the phone.
+- IAD + interface 1: class `02/0d/00` ("CDC Network Control Model (NCM)"), 1 interrupt IN endpoint `0x84`, CDC functional descriptors (union, NCM, ethernet MAC string); interface 2: class `0a/00/01` ("CDC Network Data"), bulk IN `0x82`, bulk OUT `0x02`, 2 alt settings.
+- The phone's kernel bound `cdc_ncm` and registered `eth0` (MAC `62:a0:38:25:e8:a2`, 425 Mbit/s). This is the radio-side NCM gadget of the CarPlay IP link.
+Not done: iAP2 over interface 0 (endpoints 0x81/0x01), IPv6/mDNS/AirPlay over eth0.
