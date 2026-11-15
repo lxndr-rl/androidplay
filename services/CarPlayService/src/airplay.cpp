@@ -154,6 +154,25 @@ static std::optional<int> intField(const Value& d, const char* k) {
     return static_cast<int>(*i);
 }
 
+bool hidTouchLogicalMax(const uint8_t* d, size_t n, int& maxX, int& maxY) {
+    int lmax = 0; std::vector<int> usages; bool gx = false, gy = false;
+    for (size_t i = 0; i < n;) {
+        uint8_t b = d[i]; if (b == 0xFE) return gx && gy;               // long item: not used by touch descriptors
+        size_t sz = b & 3; if (sz == 3) sz = 4;
+        if (i + 1 + sz > n) break;
+        int type = (b >> 2) & 3, tag = b >> 4;
+        int64_t v = 0; for (size_t k = 0; k < sz; k++) v |= static_cast<int64_t>(d[i + 1 + k]) << (8 * k);
+        if (type == 1 && tag == 2) lmax = static_cast<int>(v);           // Global: Logical Maximum (unsigned here)
+        else if (type == 2 && tag == 0) usages.push_back(static_cast<int>(v));   // Local: Usage
+        else if (type == 0 && tag == 8) {                                 // Main: Input
+            for (int u : usages) { if (u == 0x30) { maxX = lmax; gx = true; } else if (u == 0x31) { maxY = lmax; gy = true; } }
+            usages.clear();
+        } else if (type == 0 && (tag == 10 || tag == 12 || tag == 9 || tag == 11)) usages.clear();   // Collection/End/Output/Feature
+        i += 1 + sz;
+    }
+    return gx && gy && maxX > 0 && maxY > 0;
+}
+
 std::optional<InfoReply> parseInfo(const Value& v) {
     if (v.t != Value::T::Dict) return std::nullopt;
     auto* disp = v.get("displays");
@@ -165,6 +184,13 @@ std::optional<InfoReply> parseInfo(const Value& v) {
     r.width = *w; r.height = *h;
     if (auto* u = d0.get("uuid"); u && u->t == Value::T::Str) r.displayUuid = u->s;
     if (auto* k = v.get("keepAliveSendStatsAsBody")) if (auto b = k->asBool()) r.keepAliveStats = *b;
+    if (auto* hd = v.get("hidDevices"); hd && hd->t == Value::T::Array)
+        for (const auto& e : hd->a) {
+            auto* ds = e.get("hidDescriptor");
+            if (!ds || ds->t != Value::T::Data) continue;
+            int mx = 0, my = 0;
+            if (hidTouchLogicalMax(ds->d.data(), ds->d.size(), mx, my)) { r.touchLogicalX = mx; r.touchLogicalY = my; break; }
+        }
     // modes layout UNVERIFIED: resources[] entries with resourceID 1, transferType 1, takeConstraint 100.
     if (auto* m = v.get("modes"); m && m->t == Value::T::Dict)
         if (auto* rs = m->get("resources"); rs && rs->t == Value::T::Array)
@@ -320,9 +346,9 @@ std::optional<TouchEvent> TouchTracker::onReport(const uint8_t* r, size_t n) {
     if (n != 5) return std::nullopt;
     bool tip = r[0] & 1;
     int rx = r[1] | (r[2] << 8), ry = r[3] | (r[4] << 8);
-    rx = std::min(rx, 32767); ry = std::min(ry, 32767);
-    int x = static_cast<int>(static_cast<int64_t>(rx) * (w_ - 1) / 32767);
-    int y = static_cast<int>(static_cast<int64_t>(ry) * (h_ - 1) / 32767);
+    rx = std::min(rx, lx_); ry = std::min(ry, ly_);
+    int x = static_cast<int>(static_cast<int64_t>(rx) * (w_ - 1) / lx_);
+    int y = static_cast<int>(static_cast<int64_t>(ry) * (h_ - 1) / ly_);
     TouchEvent e{TouchEvent::Kind::Move, x, y};
     if (!down_ && tip) { down_ = true; e.kind = TouchEvent::Kind::Down; return e; }
     if (down_ && tip) return e;

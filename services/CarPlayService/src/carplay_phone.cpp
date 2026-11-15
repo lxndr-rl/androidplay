@@ -2,7 +2,7 @@
 // radio and eth0 (CDC NCM) is up. Steps: mDNS-discover the radio's _airplay._tcp over IFACE (IPv6 link-local),
 // `GET /info` on a throwaway connection (logged), then the AirPlay Client sequence (CP-007) through SessionRunner
 // (IPv6), then stream a looped H.264 fixture and a tone (synthetic, NOT the phone screen yet).
-// usage: carplay_phone IFACE SECONDS H264_FIXTURE PCM_FIXTURE
+// usage: carplay_phone IFACE SECONDS H264_FIXTURE PCM_FIXTURE [LIVE_PORT [TOUCH_FIFO]]
 // STATUS: first run against a real radio; nothing is verified until a log says so.
 #include "session_runner.hpp"
 #include <arpa/inet.h>
@@ -103,6 +103,8 @@ static std::string uuid() { return randHex(8) + "-" + randHex(4) + "-" + randHex
 int main(int argc, char** argv) {
     if (argc < 5) { fprintf(stderr, "usage: carplay_phone IFACE SECONDS H264 PCM [LIVE_PORT]\n"); return 2; }
     int livePort = argc > 5 ? atoi(argv[5]) : 0;
+    int touchFd = -1;   // FIFO read by the privileged injector (InputBridge InjectMain): lines "D|M|U x y"
+    if (argc > 6) { touchFd = open(argv[6], O_RDWR | O_NONBLOCK); if (touchFd < 0) fprintf(stderr, "touch fifo %s: %s\n", argv[6], strerror(errno)); }
     T0 = mono();
     const char* ifn = argv[1]; double secs = atof(argv[2]);
     B h264 = readFile(argv[3]), pcm = readFile(argv[4]);
@@ -137,7 +139,10 @@ int main(int argc, char** argv) {
     cfg.deviceId = "02:" + randHex(2) + ":" + randHex(2) + ":" + randHex(2) + ":" + randHex(2) + ":" + randHex(2);
     cfg.randomConnId = [] { FILE* f = fopen("/dev/urandom", "rb"); uint64_t v = 0; if (f) { size_t r = fread(&v, 8, 1, f); (void)r; fclose(f); } return int64_t((v >> 1) | 1); };
     cfg.nowNtp = [] { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts); return ntpFromUnixMicros((uint64_t)ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000); };
-    ClientCallbacks cb; cb.onTouch = [](const TouchEvent& e) { if (e.kind != TouchEvent::Kind::Move) LOG("TOUCH kind=%d x=%d y=%d", (int)e.kind, e.x, e.y); };
+    ClientCallbacks cb; cb.onTouch = [touchFd](const TouchEvent& e) {
+        if (e.kind != TouchEvent::Kind::Move) LOG("TOUCH kind=%d x=%d y=%d", (int)e.kind, e.x, e.y);
+        if (touchFd >= 0) { char l[48]; int n = snprintf(l, sizeof l, "%c %d %d\n", e.kind == TouchEvent::Kind::Down ? 'D' : e.kind == TouchEvent::Kind::Up ? 'U' : 'M', e.x, e.y); ssize_t w = write(touchFd, l, n); (void)w; }
+    };
     cb.onKeyFrameRequested = [&live] { LOG("radio requested a key frame"); live.keyframe(); };
     cb.onHid = [](const std::string& u, const std::vector<uint8_t>& r) { char h[64] = {0}; for (size_t i = 0; i < r.size() && i < 20; i++) snprintf(h + i * 3, 4, "%02x ", r[i]); LOG("HID report uuid=%s len=%zu bytes=%s", u.c_str(), r.size(), h); };
     Client client(cfg, cb);

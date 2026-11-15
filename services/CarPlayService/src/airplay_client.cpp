@@ -45,7 +45,7 @@ std::vector<Action> Client::start() {
             auto i = v ? parseInfo(*v) : std::nullopt;
             if (!i) { fail("/info reply unusable (no display size)", out); return; }
             info_ = *i;
-            touchOwner_ = std::make_unique<TouchTracker>(info_->width, info_->height);
+            touchOwner_ = std::make_unique<TouchTracker>(info_->width, info_->height, info_->touchLogicalX, info_->touchLogicalY);
             // Step 3: open event channel (we dial; the car sends requests on it)
             out.push_back(Action{Action::Kind::OpenEvent, setup_.eventPort, {}, {}});
             // Step 4: RECORD /

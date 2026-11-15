@@ -63,7 +63,11 @@ struct InfoReply {
     std::string displayUuid;
     bool keepAliveStats = false;      // key value unrecorded in the source -> default false (UNVERIFIED)
     bool mainScreenTake100 = false;   // modes: MainScreen Take, takeConstraint 100 -> initial screen sync
+    // From the touch-screen HID descriptor in /info hidDevices (observed on a real radio: 0..1280 x 0..720, not 0..32767).
+    int touchLogicalX = 32767, touchLogicalY = 32767;
 };
+// Minimal HID report-descriptor scan: logical maximum of the Generic Desktop X (0x30) and Y (0x31) inputs. false if absent.
+bool hidTouchLogicalMax(const uint8_t* d, size_t n, int& maxX, int& maxY);
 std::optional<InfoReply> parseInfo(const bplist::Value& v);
 struct SetupReply { int eventPort = 0, keepAlivePort = 0, timingPort = 0; int screenDataPort = 0, audioDataPort = 0, audioControlPort = 0; };
 std::optional<SetupReply> parseSetupReply(const bplist::Value& v);
@@ -122,14 +126,15 @@ std::vector<uint8_t> timingReply(const uint8_t* req, size_t n, uint64_t nowNtp);
 
 // ---------- input (6.6) ----------
 struct TouchEvent { enum class Kind { Down, Move, Up } kind; int x, y; };
-// LEGACY FIXED LAYOUT seen on one car: 5 bytes, bit0 tip, X u16 LE, Y u16 LE, logical 0..32767, no report id.
-// The source says never hard-code: a real implementation must parse /info hidDescriptor (NOT implemented).
+// 5-byte layout (bit0 tip, X u16 LE, Y u16 LE, no report id) seen on two radios. The LOGICAL RANGE differs: 0..32767
+// on the documented car, 0..1280 x 0..720 on the Zlink radio: take it from the /info hidDescriptor (hidTouchLogicalMax).
 class TouchTracker {
 public:
-    TouchTracker(int captureW, int captureH) : w_(captureW), h_(captureH) {}
+    TouchTracker(int captureW, int captureH, int logicalX = 32767, int logicalY = 32767)
+        : w_(captureW), h_(captureH), lx_(logicalX > 0 ? logicalX : 32767), ly_(logicalY > 0 ? logicalY : 32767) {}
     std::optional<TouchEvent> onReport(const uint8_t* r, size_t n);
 private:
-    int w_, h_;
+    int w_, h_, lx_, ly_;
     bool down_ = false;
 };
 
