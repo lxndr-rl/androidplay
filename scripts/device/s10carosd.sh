@@ -10,10 +10,14 @@
 #   * CARPLAY never lasts more than CARPLAY_GRACE seconds without a radio request and never outlives a session.
 #   * Only ids/strings change between states (no function add/remove, no HAL toggle).
 #   * A guard rebinds the UDC if it stays empty. Kill switch: touch /data/local/tmp/s10caros.off
-# usage: s10carosd.sh [start|stop|status]
+# usage: [NOSWITCH=1] [SOLE=1] [SWEEP=1] s10carosd.sh [start|stop|status]     (NOSWITCH=1: only log what it would do)
 D=/data/local/tmp; G=/config/usb_gadget/g1; T=/sys/kernel/tracing
 OFF=$D/s10caros.off; LOG=$D/s10carosd.log; PIDF=$D/s10carosd.pid; STATE=$D/s10carosd.state
 CARPLAY_GRACE=${CARPLAY_GRACE:-25}
+GENERIC=${GENERIC:-1}          # unknown-host trigger (hosts that never send the AOA probe, e.g. the Chevrolet radio)
+GENERIC_WAIT=${GENERIC_WAIT:-8}  # seconds the USB must stay configured with no adb connection before trying CARPLAY
+GENERIC_COOLDOWN=${GENERIC_COOLDOWN:-120}
+SWEEP=${SWEEP:-1}              # every other c0 53 answered with a different value (data for hosts that stop after c0 53)
 UDC=$(ls /sys/class/udc | head -1)
 t() { cut -d' ' -f1 /proc/uptime; }
 log() { echo "$(t) $*" >> $LOG; }
@@ -26,6 +30,22 @@ setids() {   # vid pid manufacturer product serial (UDC cycle only)
   echo "$3" > $G/strings/0x409/manufacturer; echo "$4" > $G/strings/0x409/product
   [ -n "$5" ] && echo "$5" > $G/strings/0x409/serialnumber
   echo $UDC > $G/UDC
+}
+# Android's USB service rebuilds the gadget configuration whenever it changes mode (e.g. when Zlink's AOA `40 35` makes it enter
+# accessory mode); that drops our link. Put it back (and rebuild the FunctionFS side if the daemon or the function is gone).
+ensure_composed() {
+  [ -e $G/configs/b.1/s10_carplay ] && [ -d $G/functions/ffs.carplay ] && [ -n "$(pidof ffs_probe)" ] && return 0
+  log "recompose: link=$([ -e $G/configs/b.1/s10_carplay ] && echo yes || echo NO) fn=$([ -d $G/functions/ffs.carplay ] && echo yes || echo NO) ffs_probe=$([ -n "$(pidof ffs_probe)" ] && echo yes || echo NO)"
+  echo "" > $G/UDC; sleep 1
+  for p in $(pidof ffs_probe 2>/dev/null); do kill $p; done; umount /dev/ffs-carplay 2>/dev/null
+  rm -f $G/configs/b.1/s10_carplay; rmdir $G/functions/ffs.carplay 2>/dev/null
+  mkdir $G/functions/ffs.carplay
+  S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 > $D/ffs_events.log 2>&1 &
+  sleep 2
+  ln -s $G/functions/ffs.carplay $G/configs/b.1/s10_carplay
+  [ -e $G/configs/b.1/function0 ] || ln -s $G/functions/ffs.adb $G/configs/b.1/function0
+  echo $UDC > $G/UDC; sleep 1
+  log "recomposed (cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"
 }
 to_adb()     { setids 0x04e8 0x685d samsung SM-G975F "$SER_ORIG"; echo adb > $STATE; log "state ADB"; }
 to_carplay() { setids 0x05ac 0x12a8 "Apple Inc." iPhone "$SER_APPLE"; echo carplay > $STATE; CP_SINCE=$(cut -d. -f1 /proc/uptime); log "state CARPLAY ($1)"; }
@@ -58,9 +78,11 @@ SER_ORIG=$(cat $G/strings/0x409/serialnumber)
 SER_APPLE=00008030-001A2B3C4D5E6F78    # iPhone-style 25-char serial (made-up value)
 log "start: ids=$(cat $G/idVendor):$(cat $G/idProduct) udc=$(cat $G/UDC) serial_orig=$SER_ORIG"
 
+# compose our function next to adb. Its interface class is ff/00/00 (NOT adb's ff/42/01): a PC's adb picks the first interface
+# matching ff/42/01, and when ours came first adb stopped seeing the phone (seen 2026-11-15, order flips after a cable cycle)
 # compose our function next to adb (FunctionFS must have its descriptors before the UDC is bound again)
 $D/gadget_manager --compose-into g1 setup >> $LOG 2>&1
-S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 clone > $D/ffs_events.log 2>&1 &
+S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 > $D/ffs_events.log 2>&1 &
 sleep 2
 $D/gadget_manager --compose-into g1 bind >> $LOG 2>&1
 echo adb > $STATE
@@ -69,11 +91,15 @@ log "composed; state ADB (cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"
 # trace: remember the head unit's probes (AOA getProtocol c0 33 / Apple c0 53) in flag files
 echo 0 > $T/tracing_on 2>/dev/null; echo > $T/trace
 echo 1 > $T/events/dwc3/dwc3_ctrl_req/enable; echo 1 > $T/tracing_on
-rm -f $D/s10.aoa $D/s10.apple
+rm -f $D/s10.aoa $D/s10.apple; : > $D/s10carosd.ctrl.log; CN=0
 ( cat $T/trace_pipe | while read -r line; do
     case "$line" in
-      *"c0 33 00 00 00 00 02 00"*) touch $D/s10.aoa;;
-      *"c0 53 00 00 00 00 04 00"*) touch $D/s10.apple;;
+      *"c0 33 00 00 00 00 02 00"*) touch $D/s10.aoa; echo "$(cut -d' ' -f1 /proc/uptime) saw AOA probe c0 33" >> $LOG;;
+      *"c0 53 00 00 00 00 04 00"*) touch $D/s10.apple; echo "$(cut -d' ' -f1 /proc/uptime) saw Apple probe c0 53" >> $LOG;;
+    esac
+    # any non-standard request (printed as raw bytes, not as a name): keep a short record of what each host asks us
+    case "$line" in
+      *"dwc3_ctrl_req: "[0-9a-f][0-9a-f]" "[0-9a-f][0-9a-f]" "*) CN=$((CN+1)); [ $CN -le 400 ] && echo "$(cut -d' ' -f1 /proc/uptime) state=$(cat $STATE 2>/dev/null) ${line##*dwc3_ctrl_req: }" >> $D/s10carosd.ctrl.log;;
     esac
   done ) &
 TRACER=$!
@@ -86,16 +112,40 @@ TRACER=$!
 GUARD=$!
 
 trap 'stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0' TERM INT
-SERVED=0; NA=0
+SERVED=0; NA=0; TICK=0; MISS=0; CFG=0; LAST_GENERIC=-9999
 while :; do
   sleep 1
   [ -f $OFF ] && { log "kill switch: stopping"; stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0; }
   [ -f $D/s10carosd.stop ] && exit 0
   S=$(cat $STATE)
+  TICK=$((TICK+1))
+  if [ $((TICK % 30)) = 0 ]; then log "alive: state=$S udc=$(cat $G/UDC) udc_state=$(cat /sys/class/udc/$UDC/state 2>/dev/null) ids=$(cat $G/idVendor):$(cat $G/idProduct) link=$([ -e $G/configs/b.1/s10_carplay ] && echo yes || echo NO) trace_on=$(cat $T/tracing_on)"; fi
   if [ "$S" = adb ]; then
+    # keep our function linked in ADB state too (the HAL drops it on every mode change); only when nothing else is going on
+    if [ ! -e $G/configs/b.1/s10_carplay ] && [ ! -f $D/s10.aoa ] && [ ! -f $D/s10.switching ]; then MISS=$((MISS+1)); else MISS=0; fi
+    if [ $MISS -ge 8 ]; then MISS=0; touch $D/s10.switching; ensure_composed; rm -f $D/s10.switching; fi
+    # unknown host: configured for GENERIC_WAIT s with nobody using adb -> not a dev PC, try CARPLAY (once per cooldown)
+    if [ "$GENERIC" = 1 ] && [ ! -f $D/s10.aoa ]; then
+      if [ "$(cat /sys/class/udc/$UDC/state 2>/dev/null)" = configured ]; then CFG=$((CFG+1)); else CFG=0; fi
+      if [ $CFG -ge $GENERIC_WAIT ]; then
+        NOW=$(cut -d. -f1 /proc/uptime)
+        if [ $((NOW - LAST_GENERIC)) -ge $GENERIC_COOLDOWN ] && ! dumpsys adb 2>/dev/null | grep -q "connected_to_adb=true"; then
+          LAST_GENERIC=$NOW; CFG=0
+          if [ "$NOSWITCH" = 1 ]; then log "NOSWITCH: would try CARPLAY (unknown host, no adb)"; else
+            log "unknown host (configured ${GENERIC_WAIT}s, no adb connection): trying CARPLAY"
+            touch $D/s10.switching; ensure_composed; to_carplay "unknown host"; rm -f $D/s10.switching
+          fi
+        else CFG=0; fi
+      fi
+    fi
     if [ -f $D/s10.aoa ]; then
       rm -f $D/s10.aoa $D/s10.apple
-      touch $D/s10.switching; to_carplay "head unit probed us (AOA)"; rm -f $D/s10.switching
+      if [ "$NOSWITCH" = 1 ]; then log "NOSWITCH: would switch to CARPLAY now"; else
+        touch $D/s10.switching
+        sleep 3                       # let Android finish its accessory-mode attempt and settle back to adb
+        ensure_composed
+        to_carplay "head unit probed us (AOA)"; rm -f $D/s10.switching
+      fi
     fi
   else   # carplay
     if [ -d $D/swap.lock ]; then SERVED=1; continue; fi          # a session is running

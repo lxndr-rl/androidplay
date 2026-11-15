@@ -7,7 +7,7 @@ a = [int(x, 16) for x in sys.argv[1:6]] if len(sys.argv) >= 6 else [0xC0, 0x53, 
 def find():
     for d in glob.glob('/sys/bus/usb/devices/*'):
         try:
-            if open(d + '/idVendor').read().strip() == '05ac' and open(d + '/idProduct').read().strip() == '12a8':
+            if open(d + '/idVendor').read().strip() == os.environ.get('VID', '05ac') and open(d + '/idProduct').read().strip() == os.environ.get('PID', '12a8'):
                 return (int(open(d + '/busnum').read()), int(open(d + '/devnum').read()))
         except OSError:
             pass
