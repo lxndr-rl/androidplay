@@ -1,6 +1,7 @@
 // ffs_probe: mount FunctionFS, write descriptors/strings so the gadget can bind,
 // then log EP0 events for N seconds. Hardware probe for USB-002; not the final daemon.
 // usage: ffs_probe INSTANCE SECONDS [echo]   (instance = ffs.<INSTANCE> in configfs)
+// modes (3rd arg): echo = loopback on bulk endpoints; noeps = interface with NO endpoints (ep0 only).
 // echo: bytes read from the OUT endpoint (ep2) are written back on the IN endpoint (ep1).
 #include "gadget_manager.hpp"
 #include <cerrno>
@@ -37,7 +38,8 @@ int main(int argc, char** argv) {
     int ep0 = open((mnt + "/ep0").c_str(), O_RDWR);
     if (ep0 < 0) { perror("open ep0"); return 1; }
     FfsInterface itf;
-    itf.eps = {{0x81, 0x02, 64, 512}, {0x02, 0x02, 64, 512}};  // bulk IN, bulk OUT
+    bool noeps = argc > 3 && std::string(argv[3]) == "noeps";
+    if (!noeps) itf.eps = {{0x81, 0x02, 64, 512}, {0x02, 0x02, 64, 512}};  // bulk IN, bulk OUT
     auto d = build_ffs_descriptors({itf});
     auto s = build_ffs_strings("s10probe");
     if (write(ep0, d.data(), d.size()) != (ssize_t)d.size()) { perror("write descriptors"); return 1; }
