@@ -100,15 +100,20 @@ int main(int argc, char** argv) {
         close(c);
     }
 
-    SessionRunner runner; runner.trace = [](const char* ch, const uint8_t* d, size_t n) { dumpText(ch, d, n); };
+    SessionRunner runner;
+    FILE* raw = fopen("/data/local/tmp/session_raw.bin", "ab");   // every control/event byte, tagged: [tag(4) len(4) bytes]
+    runner.trace = [raw](const char* ch, const uint8_t* d, size_t n) {
+        dumpText(ch, d, n);
+        if (raw) { char tag[5] = {0}; strncpy(tag, ch, 4); uint32_t l = (uint32_t)n; fwrite(tag, 1, 4, raw); fwrite(&l, 4, 1, raw); fwrite(d, 1, n, raw); fflush(raw); }
+    };
     int tp = runner.bindTiming(true);
     ClientConfig cfg; cfg.uuid = uuid(); cfg.correlationUuid = uuid(); cfg.timingPort = tp;
     cfg.deviceId = "02:" + randHex(2) + ":" + randHex(2) + ":" + randHex(2) + ":" + randHex(2) + ":" + randHex(2);
     cfg.randomConnId = [] { FILE* f = fopen("/dev/urandom", "rb"); uint64_t v = 0; if (f) { size_t r = fread(&v, 8, 1, f); (void)r; fclose(f); } return int64_t((v >> 1) | 1); };
     cfg.nowNtp = [] { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts); return ntpFromUnixMicros((uint64_t)ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000); };
-    ClientCallbacks cb; cb.onTouch = [](const TouchEvent& e) { LOG("TOUCH kind=%d x=%d y=%d", (int)e.kind, e.x, e.y); };
+    ClientCallbacks cb; cb.onTouch = [](const TouchEvent& e) { if (e.kind != TouchEvent::Kind::Move) LOG("TOUCH kind=%d x=%d y=%d", (int)e.kind, e.x, e.y); };
     cb.onKeyFrameRequested = [] { LOG("radio requested a key frame"); };
-    cb.onHid = [](const std::string& u, const std::vector<uint8_t>& r) { LOG("HID report uuid=%s len=%zu", u.c_str(), r.size()); };
+    cb.onHid = [](const std::string& u, const std::vector<uint8_t>& r) { char h[64] = {0}; for (size_t i = 0; i < r.size() && i < 20; i++) snprintf(h + i * 3, 4, "%02x ", r[i]); LOG("HID report uuid=%s len=%zu bytes=%s", u.c_str(), r.size(), h); };
     Client client(cfg, cb);
     LOG("starting AirPlay client, timingPort=%d deviceId=%s", tp, cfg.deviceId.c_str());
     if (!runner.start(client, host, port)) { LOG("start failed: %s", runner.error().c_str()); return 1; }
