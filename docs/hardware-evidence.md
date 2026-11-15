@@ -119,3 +119,10 @@ Run: `PROBE_MODE=clone SOLE=1 SWAP=1 radio_c053_probe.sh 1500` on the radio (use
 - typec `data_role` stayed `[device]`, `power_role` stayed `[sink]` (never written); charger kept "Charging", VBUS valid from the PC, iin ~460 mA, no OTG boost. Log line `max77705_set_host_turn_on_event: current_set is 1!` appeared; no VBUS source observed.
 - `echo 1 > id` restored `b_peripheral` with the gadget configured again.
 This bypasses the PD DR_Swap that max77705_dr_set needs (research/okcaros-recovery.md describes OkcarOS doing the equivalent with a kernel mode switch). Not yet tested with the radio as partner. NOT yet done: iAP2 over the host-side USB interface of the radio, NCM host, AirPlay session.
+
+## Radio observation 6: phone became host, the radio never appeared (2026-11-14)
+Run: `PROBE_MODE=clone SOLE=1 SWAP=1 radio_c053_probe.sh 1500` with the id=0 hook. Raw: diagnostics-radiolog9/ (gitignored). User saw "Link fail" again and noticed USB debugging dropping and returning at each retry, with the phone still charging.
+- [V] 4 x (`c0 53` answered, `40 51` acked, hook run). Each run: `id=0` -> `state=a_host`, xHCI root hubs usb1/usb2 up on the phone, held 40 s, then `id=1` -> `b_peripheral`, gadget back. power_role stayed `[sink]`; the phone kept charging (VBUS from the radio).
+- [V] In all 4 runs the phone's host side listed **no USB device** besides its own root hubs (no `DEV` line in swap.log): the radio did not show up as a device within 40 s.
+- [V] During a_host the gadget pullup toggled `pullup=1/0` about every 0.5 s with `vbus = 0` in dmesg (the gadget layer keeps trying while the controller is in host mode; harmless but noisy, not understood).
+- Unknown (candidates, none tested): the radio's port does not support device mode (Zlink's own text is "try another usb Port"; many head units wire the CarPlay/OTG role to one port only); the radio switches to device mode later than our 40 s window or only after a longer disconnect; the radio needs a particular signal from the phone before it pulls D+; no VBUS handling mismatch is visible.
