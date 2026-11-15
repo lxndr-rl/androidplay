@@ -164,6 +164,10 @@ bool GadgetManager::teardown() {
     const std::string g = gadget_path();
     if (composing()) {  // remove only what we added, then give the gadget back to the system
         std::string u = fs_.dry_run ? "<udc>" : fs_.read(g + "/UDC");
+        // If the FFS daemon already exited, the kernel has unbound the gadget and UDC reads empty. Without this the
+        // gadget was never given back (phone off the bus until a reboot, seen repeatedly on the S10+): rebind to the
+        // controller the system would use.
+        if (u.empty()) u = pick_udc();
         // The kernel may already have dropped the gadget when the FFS daemon closed ep0, in
         // which case this write fails (seen on the S10+); cleanup must go on regardless.
         bool ok = true;

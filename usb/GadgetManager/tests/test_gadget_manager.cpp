@@ -122,6 +122,25 @@ static void test_compose_into_existing_gadget() {
     sh("rm -rf " + r);
 }
 
+// Regression (S10+): when the FFS daemon exits first, the kernel unbinds the gadget and UDC reads empty. teardown must still
+// give the gadget back to the controller, otherwise the phone stays off the USB bus until a reboot.
+static void test_compose_teardown_rebinds_dropped_gadget() {
+    std::string r = mktmp();
+    const std::string g1 = "/config/usb_gadget/g1";
+    mk(r + g1 + "/functions/ffs.adb"); mk(r + g1 + "/functions/ffs.carplay"); mk(r + g1 + "/configs/b.1"); mk(r + "/sys/class/udc/10c00000.dwc3");
+    touch(r + g1 + "/UDC", "\n");   // the kernel already dropped it
+    sh("ln -s " + r + g1 + "/functions/ffs.adb " + r + g1 + "/configs/b.1/function0");
+    sh("ln -s " + r + g1 + "/functions/ffs.carplay " + r + g1 + "/configs/b.1/s10_carplay");
+    Fs fs; fs.root = r; fs.create_attrs = true;
+    GadgetConfig c; c.compose_into = "g1";
+    GadgetManager m(fs, c);
+    CHECK(fs.read(g1 + "/UDC").empty());
+    CHECK(m.teardown());
+    CHECK(fs.read(g1 + "/UDC") == "10c00000.dwc3");              // rebound although it was empty on entry
+    CHECK(!fs.exists(g1 + "/configs/b.1/s10_carplay"));
+    CHECK(fs.exists(g1 + "/configs/b.1/function0"));              // adb function untouched
+}
+
 static void test_compose_dry_run() {
     Fs fs; fs.dry_run = true;
     GadgetConfig c; c.compose_into = "g1";
@@ -177,6 +196,7 @@ int main() {
     test_takeover_unbinds_g1_first();
     test_bind_without_udc_fails();
     test_compose_into_existing_gadget();
+    test_compose_teardown_rebinds_dropped_gadget();
     test_compose_dry_run();
     test_ffs_blobs();
     test_role_switch_sequence();
