@@ -2,7 +2,7 @@
 # Hardware experiment, started by ffs_probe right after it acknowledged the radio's `40 51` (role switch request).
 # Makes the phone USB host by forcing the Exynos dwc3 OTG FSM (id=0, like an OTG adapter's grounded ID).
 # power_role is never written (verified on a PC port 2026-11-14: stays sink, charging continues, no VBUS source).
-# Then polls the phone's host side for the radio appearing as a USB device, records its descriptors, restores id=1.
+# Then polls (120 s) the phone's host side for the radio appearing as a USB device, records its descriptors, restores id=1.
 # Single-flight: the radio retries every ~25 s and ffs_probe may start this more than once.
 L=/data/local/tmp/swap.log; O=/sys/devices/platform/10c00000.usb/10c00000.dwc3; P=/sys/class/typec/port0
 mkdir /data/local/tmp/swap.lock 2>/dev/null || exit 0
@@ -11,7 +11,9 @@ snap() { echo "$(t) $1 id=$(cat $O/id) state=$(cat $O/state) udc=$(cat /sys/clas
 dmesg -c >/dev/null 2>&1
 snap before
 echo 0 > $O/id; echo "$(t) wrote id=0 rc=$?" >> $L
-for i in $(seq 1 40); do sleep 1; snap hold$i
+mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
+portsc() { for f in $(find /sys/kernel/debug/usb -name "portsc*" 2>/dev/null | head -4); do echo "$(t) PORTSC $f $(cat $f 2>&1 | head -2 | tr "\n" " ")" >> $L; done; }
+for i in $(seq 1 120); do sleep 1; snap hold$i; case $i in 1|10|40|80|120) portsc;; esac
   for d in /sys/bus/usb/devices/*; do
     [ -f $d/idVendor ] && [ "$(cat $d/idVendor)" != 1d6b ] && echo "$(t) DEV $(basename $d) $(cat $d/idVendor):$(cat $d/idProduct) '$(cat $d/manufacturer 2>/dev/null)'/'$(cat $d/product 2>/dev/null)' ifs=$(cat $d/bNumInterfaces 2>/dev/null) speed=$(cat $d/speed 2>/dev/null)" >> $L
   done
