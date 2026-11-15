@@ -97,12 +97,37 @@ struct Live {
     bool active() const { return cli >= 0; }
 };
 
+// Live audio from the projector: raw 48 kHz stereo s16le on TCP 127.0.0.1:PORT, delivered in 10 ms (1920 byte) chunks.
+struct LiveAudio {
+    int lis = -1, cli = -1; B buf; size_t chunks = 0;
+    bool open(int port) {
+        lis = socket(AF_INET, SOCK_STREAM, 0); int one = 1; setsockopt(lis, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+        sockaddr_in a{}; a.sin_family = AF_INET; a.sin_port = htons(port); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (bind(lis, (sockaddr*)&a, sizeof a) != 0 || listen(lis, 1) != 0) { LOG("audio listen failed errno=%d", errno); return false; }
+        fcntl(lis, F_SETFL, O_NONBLOCK); LOG("live audio listener on 127.0.0.1:%d", port); return true;
+    }
+    std::vector<B> poll() {
+        std::vector<B> out;
+        if (cli < 0 && lis >= 0) { int c = accept(lis, nullptr, nullptr); if (c >= 0) { cli = c; fcntl(cli, F_SETFL, O_NONBLOCK); LOG("live audio source connected"); } }
+        if (cli >= 0) {
+            uint8_t tmp[16384]; for (;;) { ssize_t n = recv(cli, tmp, sizeof tmp, 0); if (n > 0) buf.insert(buf.end(), tmp, tmp + n); else if (n == 0) { LOG("live audio source closed"); close(cli); cli = -1; buf.clear(); break; } else break; }
+            const size_t C = 1920;
+            // bounded latency: if the sender stalled for more than 300 ms of audio, keep only the newest 100 ms
+            if (buf.size() > C * 30) buf.erase(buf.begin(), buf.end() - C * 10);
+            while (buf.size() >= C) { out.emplace_back(buf.begin(), buf.begin() + C); buf.erase(buf.begin(), buf.begin() + C); chunks++; }
+        }
+        return out;
+    }
+    bool active() const { return cli >= 0; }
+};
+
 static std::string randHex(int n) { static const char* h = "0123456789ABCDEF"; std::string s; FILE* f = fopen("/dev/urandom", "rb"); for (int i = 0; i < n; i++) { unsigned char c = 0; if (f && fread(&c, 1, 1, f) != 1) c = 0; s += h[c & 15]; } if (f) fclose(f); return s; }
 static std::string uuid() { return randHex(8) + "-" + randHex(4) + "-" + randHex(4) + "-" + randHex(4) + "-" + randHex(12); }
 
 int main(int argc, char** argv) {
     if (argc < 5) { fprintf(stderr, "usage: carplay_phone IFACE SECONDS H264 PCM [LIVE_PORT]\n"); return 2; }
     int livePort = argc > 5 ? atoi(argv[5]) : 0;
+    int audioPort = argc > 7 ? atoi(argv[7]) : 0;
     int touchFd = -1;   // FIFO read by the privileged injector (InputBridge InjectMain): lines "D|M|U x y"
     if (argc > 6) { touchFd = open(argv[6], O_RDWR | O_NONBLOCK); if (touchFd < 0) fprintf(stderr, "touch fifo %s: %s\n", argv[6], strerror(errno)); }
     T0 = mono();
@@ -111,6 +136,7 @@ int main(int argc, char** argv) {
     std::vector<B> aus; { B cur; for (auto& n : splitAnnexB(h264.data(), h264.size())) { cur.insert(cur.end(), {0,0,0,1}); cur.insert(cur.end(), n.begin(), n.end()); int t = n[0] & 0x1F; if (t == 1 || t == 5) { aus.push_back(cur); cur.clear(); } } }
     LOG("fixtures: %zu access units, %zu pcm bytes", aus.size(), pcm.size());
     Live live; if (livePort) live.open(livePort);
+    LiveAudio liveAudio; if (audioPort) liveAudio.open(audioPort);
     sockaddr_in6 radio{}; int port = discover(ifn, 60, radio);
     if (!port) { LOG("no AirPlay service found"); return 1; }
     char ip[64]; inet_ntop(AF_INET6, &radio.sin6_addr, ip, sizeof ip);
@@ -153,16 +179,18 @@ int main(int argc, char** argv) {
     while (mono() < end && !runner.failed()) {
         runner.step(5, nowMs());
         if (client.state() != last) { last = client.state(); LOG("client state=%d failure='%s'", (int)last, client.failure().c_str()); }
-        auto liveAus = live.poll();   // always drain, so frames sent before streaming starts do not pile up
+        auto liveAus = live.poll();
+        auto liveAudioChunks = liveAudio.poll();   // always drain, so frames sent before streaming starts do not pile up
         if (client.state() == Client::State::Streaming) {
             double t = mono();
             for (auto& au : liveAus) { runner.pushVideo(au.data(), au.size()); sentAu++; }
             if (!live.active() && t >= nextV && !aus.empty()) { runner.pushVideo(aus[ai % aus.size()].data(), aus[ai % aus.size()].size()); ai++; sentAu++; nextV = t + 0.033; }
-            if (t >= nextA && pcm.size() >= 1920) { const size_t c = 480 * 4; if (pi + c > pcm.size()) pi = 0; runner.pushAudio(pcm.data() + pi, c); pi += c; nextA = t + 0.010; }
+            for (auto& ch : liveAudioChunks) runner.pushAudio(ch.data(), ch.size());
+            if (!liveAudio.active() && t >= nextA && pcm.size() >= 1920) { const size_t c = 480 * 4; if (pi + c > pcm.size()) pi = 0; runner.pushAudio(pcm.data() + pi, c); pi += c; nextA = t + 0.010; }
         }
     }
     if (runner.failed()) LOG("runner failed: %s", runner.error().c_str());
     if (client.info()) LOG("radio /info parsed: %dx%d displayUuid=%s", client.info()->width, client.info()->height, client.info()->displayUuid.c_str());
-    LOG("DONE state=%d access_units_sent=%zu live_aus=%zu", (int)client.state(), sentAu, live.aus);
+    LOG("DONE state=%d access_units_sent=%zu live_aus=%zu live_audio_chunks=%zu", (int)client.state(), sentAu, live.aus, liveAudio.chunks);
     return 0;
 }

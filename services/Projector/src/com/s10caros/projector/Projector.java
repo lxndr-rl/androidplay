@@ -21,7 +21,7 @@ import java.net.Socket;
  * is never locked, and third-party apps may open new tasks on it: an app-owned untrusted display cannot do that),
  * encodes it to H.264 and sends length-prefixed Annex-B access units to the sender on 127.0.0.1.
  *
- *   CLASSPATH=projector.dex app_process / com.s10caros.projector.Projector W H DPI FPS KBPS SINK_PORT [SECONDS]
+ *   CLASSPATH=projector.dex app_process / com.s10caros.projector.Projector W H DPI FPS KBPS SINK_PORT [SECONDS [AUDIO_PORT]]
  * Logs "S10CarOS-PRJ display=<id>" (logcat) and prints it on stdout.
  */
 public final class Projector {
@@ -49,6 +49,7 @@ public final class Projector {
         final int w = Integer.parseInt(a[0]), h = Integer.parseInt(a[1]), dpi = Integer.parseInt(a[2]);
         final int fps = Integer.parseInt(a[3]), kbps = Integer.parseInt(a[4]), port = Integer.parseInt(a[5]);
         final int seconds = a.length > 6 ? Integer.parseInt(a[6]) : 3600;
+        final int audioPort = a.length > 7 ? Integer.parseInt(a[7]) : 0;
         if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
         Class<?> at = Class.forName("android.app.ActivityThread");
         Object thread = at.getMethod("systemMain").invoke(null);
@@ -57,6 +58,7 @@ public final class Projector {
         DisplayManager dm = (DisplayManager) ctx.getSystemService(Context.DISPLAY_SERVICE);
 
         connectSink(port);
+        if (audioPort > 0) AudioTap.start(ctx, audioPort);
         H264Encoder enc = new H264Encoder(w, h, fps, kbps * 1000, new H264Encoder.Sink() {
             @Override public void onAccessUnit(byte[] au, boolean key, long pts) {
                 DataOutputStream o = out;
