@@ -86,7 +86,7 @@ public final class LauncherActivity extends Activity {
 
         LinearLayout main = new LinearLayout(this);
         main.setOrientation(LinearLayout.VERTICAL);
-        main.setPadding(dp(8), dp(18), dp(24), dp(84));   // bottom room for the floating Back/Home bar
+        main.setPadding(dp(8), dp(18), dp(24), dp(40));   // the Back/Home capsule floats over the (empty) middle of the sidebar
         pager = new HorizontalScrollView(this);
         pager.setHorizontalScrollBarEnabled(false);
         pager.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -123,7 +123,7 @@ public final class LauncherActivity extends Activity {
         LinearLayout s = new LinearLayout(this);
         s.setOrientation(LinearLayout.VERTICAL);
         s.setBackgroundColor(SIDEBAR);
-        s.setPadding(dp(20), dp(26), dp(14), dp(86));
+        s.setPadding(dp(20), dp(26), dp(14), dp(20));
         TextClock clock = new TextClock(this);
         clock.setFormat24Hour("HH:mm"); clock.setFormat12Hour("HH:mm");   // always 24 h
         clock.setTextSize(44); clock.setTextColor(TEXT);

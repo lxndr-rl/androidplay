@@ -78,10 +78,11 @@ public final class Projector {
         int id = vd.getDisplay().getDisplayId();
         setImeLocal(id);
         keepAwake(ctx, id);
-        panelOff();
+        startPanelSupervisor();
         Log.i(TAG, "display=" + id + " size=" + w + "x" + h + " flags=0x" + Integer.toHexString(flags));
         System.out.println("display=" + id);
         System.out.flush();
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() { @Override public void run() { panelOn(); } }));
         Thread.sleep(seconds * 1000L);
         panelOn();
         vd.release();
@@ -127,6 +128,7 @@ public final class Projector {
 
     private static final int POWER_MODE_OFF = 0, POWER_MODE_NORMAL = 2;
     private static volatile Object panelToken;
+    private static volatile boolean panelLogged;
 
     /**
      * Turns the phone's physical panel off WITHOUT putting the device (or the projected display) to sleep, like
@@ -135,8 +137,9 @@ public final class Projector {
      */
     private static void panelOff() {
         try {
-            Object token = null;
+            Object token = panelToken;
             Class<?> sc = Class.forName("android.view.SurfaceControl");
+            if (token == null) {
             try {
                 long[] ids = (long[]) sc.getMethod("getPhysicalDisplayIds").invoke(null);
                 token = sc.getMethod("getPhysicalDisplayToken", long.class).invoke(null, ids[0]);
@@ -154,9 +157,34 @@ public final class Projector {
                 Log.i(TAG, "panel token via DisplayControl");
             }
             panelToken = token;
+            }
             sc.getMethod("setDisplayPowerMode", android.os.IBinder.class, int.class).invoke(null, token, POWER_MODE_OFF);
-            Log.i(TAG, "physical panel powered off");
+            if (!panelLogged) { Log.i(TAG, "physical panel powered off"); panelLogged = true; }
         } catch (Throwable t) { Log.w(TAG, "panelOff failed: " + t + " cause=" + t.getCause()); }
+    }
+
+    // 'S' bytes arrive from the sender once a second while the CarPlay session is streaming.
+    private static volatile long lastStreamingMs = 0;
+
+    /**
+     * Panel policy: OFF while the sender says it is streaming (re-asserted every 300 ms so the power button cannot
+     * bring it back), ON again 3 s after the heartbeat stops (cable pulled, radio off, session failed) so the phone is
+     * usable when it is not projecting.
+     */
+    private static void startPanelSupervisor() {
+        Thread t = new Thread(new Runnable() {
+            @Override public void run() {
+                boolean off = false;
+                for (;;) {
+                    boolean streaming = System.currentTimeMillis() - lastStreamingMs < 3000;
+                    if (streaming) { panelOff(); off = true; }
+                    else if (off) { panelOn(); off = false; Log.i(TAG, "no streaming heartbeat: panel back on"); }
+                    try { Thread.sleep(300); } catch (InterruptedException e) { return; }
+                }
+            }
+        }, "s10-panel");
+        t.setDaemon(true);
+        t.start();
     }
 
     private static void panelOn() {
@@ -182,6 +210,7 @@ public final class Projector {
                         int b;
                         while ((b = in.read()) >= 0) {
                             if (b == 'K') { H264Encoder en = encoder; if (en != null) en.requestKeyFrame(); }
+                            else if (b == 'S') lastStreamingMs = System.currentTimeMillis();
                         }
                         out = null;
                     } catch (IOException e) {

@@ -94,6 +94,7 @@ struct Live {
         return out;
     }
     void keyframe() { if (cli >= 0) { char k = 'K'; send(cli, &k, 1, MSG_NOSIGNAL); } }
+    void heartbeat() { if (cli >= 0) { char k = 'S'; send(cli, &k, 1, MSG_NOSIGNAL); } }   // 'S': the session is streaming (panel policy)
     bool active() const { return cli >= 0; }
 };
 
@@ -174,7 +175,7 @@ int main(int argc, char** argv) {
     Client client(cfg, cb);
     LOG("starting AirPlay client, timingPort=%d deviceId=%s", tp, cfg.deviceId.c_str());
     if (!runner.start(client, host, port)) { LOG("start failed: %s", runner.error().c_str()); return 1; }
-    double end = T0 + secs; Client::State last = client.state(); size_t ai = 0, pi = 0; double nextV = 0, nextA = 0; size_t sentAu = 0;
+    double end = T0 + secs; Client::State last = client.state(); size_t ai = 0, pi = 0; double nextV = 0, nextA = 0, lastBeat = 0; size_t sentAu = 0;
     auto nowMs = [] { return (uint64_t)(mono() * 1000); };
     while (mono() < end && !runner.failed()) {
         runner.step(5, nowMs());
@@ -183,6 +184,7 @@ int main(int argc, char** argv) {
         auto liveAudioChunks = liveAudio.poll();   // always drain, so frames sent before streaming starts do not pile up
         if (client.state() == Client::State::Streaming) {
             double t = mono();
+            if (t - lastBeat >= 1.0) { live.heartbeat(); lastBeat = t; }
             for (auto& au : liveAus) { runner.pushVideo(au.data(), au.size()); sentAu++; }
             if (!live.active() && t >= nextV && !aus.empty()) { runner.pushVideo(aus[ai % aus.size()].data(), aus[ai % aus.size()].size()); ai++; sentAu++; nextV = t + 0.033; }
             for (auto& ch : liveAudioChunks) runner.pushAudio(ch.data(), ch.size());
