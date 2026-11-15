@@ -150,3 +150,8 @@ Run: phone host on port B, `usb_host_iap2` (services/CarPlayService/src/usb_host
 - [V] After the burst the radio sent nothing for ~35 s, then the bus died (RX error errno 71) at the end of the radio's attempt.
 - [V] eth0 (cdc_ncm) came up with link-local IPv6 `fe80::cc34:a1af:6ea5:4f`; no IPv6 neighbor/route was visible 6 s after the device appeared.
 - Not known: what the radio waits for after the burst (candidates: mDNS/AirPlay over eth0; an iAP2 message our driver did not send; the radio's accept list gating). Next: mDNS probe on eth0, then AirPlay client over IPv6 link-local.
+
+## Radio observation 10: the radio publishes an AirPlay service over the NCM link (2026-11-14/15) [V]
+Run: same hook; raw diagnostics-radiolog14/ (gitignored). iAP2 replay of observation 9 reproduced the same sequence (identification, certificate, auth, burst) at a second connection; after ~35 s the radio dropped the bus again (errno 71).
+- [V] The phone's `mdns_probe` on eth0 got **mDNS responses from the radio at `fe80::30c9:b4ff:fe92:809`** (EUI-64 of MAC 32:c9:b4:92:08:09) for `_airplay._tcp.local`: instance `localhost`, TXT `deviceid=32:C9:B4:92:08:09`, `features=0x44540380,0x61`, `flags=0x4`, `model=AirPlayGeneric1,1`, `pi=4bbff8d8-43fa-4af4-95f5-7fcc5039e249`, `srcvers=280.3`. Our phone-side `_carplay-ctrl._tcp` and `_raop._tcp` queries drew no visible answer in the first lines. SRV port was not decoded by that tool (binary); airplay_probe now decodes it.
+- Not yet: TCP connect to the radio's AirPlay port, `GET /info`, the AirPlay session (SETUP/RECORD) over IPv6 link-local. The existing SessionRunner is IPv4 only (CP-008).
