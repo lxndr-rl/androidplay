@@ -126,3 +126,10 @@ Run: `PROBE_MODE=clone SOLE=1 SWAP=1 radio_c053_probe.sh 1500` with the id=0 hoo
 - [V] In all 4 runs the phone's host side listed **no USB device** besides its own root hubs (no `DEV` line in swap.log): the radio did not show up as a device within 40 s.
 - [V] During a_host the gadget pullup toggled `pullup=1/0` about every 0.5 s with `vbus = 0` in dmesg (the gadget layer keeps trying while the controller is in host mode; harmless but noisy, not understood).
 - Unknown (candidates, none tested): the radio's port does not support device mode (Zlink's own text is "try another usb Port"; many head units wire the CarPlay/OTG role to one port only); the radio switches to device mode later than our 40 s window or only after a longer disconnect; the radio needs a particular signal from the phone before it pulls D+; no VBUS handling mismatch is visible.
+
+## Radio observation 7: on the OTHER USB port the radio appears as a device when the phone is host (2026-11-14) [V]
+Run: same probe, user connected to the radio's second USB port (from ~22:03 local), raw diagnostics-radiolog10/ (gitignored). On the usual port (first two hook runs) the phone's host side saw nothing, as in observation 6.
+- [V] Third and later hook runs (other port): while the phone was host (`a_host`, power_role sink, still charging), the phone's xHCI enumerated **a USB device 1-1, VID:PID `1f3a:1007`, manufacturer/product `Android`/`Android`, 3 interfaces, high speed (480)** for ~80 s per run. 1f3a is Allwinner's vendor id. So the radio did switch its port to device mode after the `40 51` request and exposed a gadget (consistent with the Zlink strings: ConfigFS g1 with iap/iap2/ncm functions).
+- Zlink UI on that port: "Connecting" then nothing, no "Link fail".
+- NOT yet captured: the device's interface classes/endpoints, descriptors, drivers bound, strings. The hook was extended to dump them on first sight (DESC/IFACE/SERIAL lines).
+- Not yet done: iAP2 identification over the radio's iAP2 interface, NCM host side, AirPlay session. Everything beyond the swap is unverified.

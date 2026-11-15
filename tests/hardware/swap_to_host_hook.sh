@@ -13,9 +13,16 @@ snap before
 echo 0 > $O/id; echo "$(t) wrote id=0 rc=$?" >> $L
 mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
 portsc() { for f in $(find /sys/kernel/debug/usb -name "portsc*" 2>/dev/null | head -4); do echo "$(t) PORTSC $f $(cat $f 2>&1 | head -2 | tr "\n" " ")" >> $L; done; }
+DUMPED=0
+dump_dev() { d=$1
+  echo "$(t) DESC $(basename $d) $(od -An -tx1 -v $d/descriptors 2>/dev/null | tr -d '\n' | cut -c1-1200)" >> $L
+  for i in $d/*:*; do echo "$(t) IFACE $(basename $i) class=$(cat $i/bInterfaceClass)/$(cat $i/bInterfaceSubClass)/$(cat $i/bInterfaceProtocol) eps=$(cat $i/bNumEndpoints) str='$(cat $i/interface 2>/dev/null)' drv=$(basename $(readlink $i/driver 2>/dev/null) 2>/dev/null)" >> $L; done
+  echo "$(t) SERIAL '$(cat $d/serial 2>/dev/null)' cfgs=$(cat $d/bNumConfigurations) maxpower=$(cat $d/bMaxPower) class=$(cat $d/bDeviceClass)" >> $L
+  dmesg | grep -E "usb 1-1|1f3a|cdc_ncm|usbcore|ncm|iap|rndis|xhci-hcd.*(error|fail)" | tail -30 | cut -c1-220 >> $L
+}
 for i in $(seq 1 120); do sleep 1; snap hold$i; case $i in 1|10|40|80|120) portsc;; esac
   for d in /sys/bus/usb/devices/*; do
-    [ -f $d/idVendor ] && [ "$(cat $d/idVendor)" != 1d6b ] && echo "$(t) DEV $(basename $d) $(cat $d/idVendor):$(cat $d/idProduct) '$(cat $d/manufacturer 2>/dev/null)'/'$(cat $d/product 2>/dev/null)' ifs=$(cat $d/bNumInterfaces 2>/dev/null) speed=$(cat $d/speed 2>/dev/null)" >> $L
+    [ -f $d/idVendor ] && [ "$(cat $d/idVendor)" != 1d6b ] && { echo "$(t) DEV $(basename $d) $(cat $d/idVendor):$(cat $d/idProduct) '$(cat $d/manufacturer 2>/dev/null)'/'$(cat $d/product 2>/dev/null)' ifs=$(cat $d/bNumInterfaces 2>/dev/null) speed=$(cat $d/speed 2>/dev/null)" >> $L; [ $DUMPED = 0 ] && { sleep 2; dump_dev $d; DUMPED=1; }; }
   done
 done
 for d in /sys/bus/usb/devices/[0-9]*-[0-9]*:*; do echo "IF $(basename $d) class=$(cat $d/bInterfaceClass)/$(cat $d/bInterfaceSubClass)/$(cat $d/bInterfaceProtocol) eps=$(cat $d/bNumEndpoints)" >> $L; done
