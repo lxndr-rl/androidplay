@@ -1,21 +1,23 @@
 #!/system/bin/sh
 # Hardware experiment, started by ffs_probe right after it acknowledged the radio's `40 51` (role switch request).
-# Tries to make the phone USB host WITHOUT touching power_role (stays sink: no VBUS source, no boost).
-# Steps: drop the gadget (radio sees a disconnect, like an iPhone about to swap), write typec data_role=host,
-# poll for a USB device appearing on the phone's host side, then restore device mode. Logs to swap.log.
-L=/data/local/tmp/swap.log; G=/config/usb_gadget/g1; P=/sys/class/typec/port0
-t() { echo "$(cut -d' ' -f1 /proc/uptime)"; }
-snap() { echo "$(t) $1 udc=$(cat $G/UDC) udcstate=$(cat /sys/class/udc/*/state) dr=$(cat $P/data_role) pr=$(cat $P/power_role) partner=$(ls /sys/class/typec | tr '\n' ',') usbdevs=$(ls /sys/bus/usb/devices 2>/dev/null | tr '\n' ',')" >> $L; }
-U=$(cat $G/UDC)
+# Makes the phone USB host by forcing the Exynos dwc3 OTG FSM (id=0, like an OTG adapter's grounded ID).
+# power_role is never written (verified on a PC port 2026-11-14: stays sink, charging continues, no VBUS source).
+# Then polls the phone's host side for the radio appearing as a USB device, records its descriptors, restores id=1.
+# Single-flight: the radio retries every ~25 s and ffs_probe may start this more than once.
+L=/data/local/tmp/swap.log; O=/sys/devices/platform/10c00000.usb/10c00000.dwc3; P=/sys/class/typec/port0
+mkdir /data/local/tmp/swap.lock 2>/dev/null || exit 0
+t() { cut -d' ' -f1 /proc/uptime; }
+snap() { echo "$(t) $1 id=$(cat $O/id) state=$(cat $O/state) udc=$(cat /sys/class/udc/*/state 2>&1 | head -1) dr=$(cat $P/data_role) pr=$(cat $P/power_role) usbdevs=$(ls /sys/bus/usb/devices 2>/dev/null | tr '\n' ',')" >> $L; }
+dmesg -c >/dev/null 2>&1
 snap before
-echo "" > $G/UDC; sleep 1; snap gadget-off
-for i in 1 2 3; do
-  echo host > $P/data_role 2> /data/local/tmp/swap.err; echo "$(t) write data_role=host rc=$? err=$(cat /data/local/tmp/swap.err)" >> $L
-  sleep 1; snap try$i
+echo 0 > $O/id; echo "$(t) wrote id=0 rc=$?" >> $L
+for i in $(seq 1 40); do sleep 1; snap hold$i
+  for d in /sys/bus/usb/devices/*; do
+    [ -f $d/idVendor ] && [ "$(cat $d/idVendor)" != 1d6b ] && echo "$(t) DEV $(basename $d) $(cat $d/idVendor):$(cat $d/idProduct) '$(cat $d/manufacturer 2>/dev/null)'/'$(cat $d/product 2>/dev/null)' ifs=$(cat $d/bNumInterfaces 2>/dev/null) speed=$(cat $d/speed 2>/dev/null)" >> $L
+  done
 done
-for i in $(seq 1 12); do sleep 1; snap poll$i
-  for d in /sys/bus/usb/devices/*; do [ -f $d/idVendor ] && echo "$(t) dev $(basename $d) $(cat $d/idVendor):$(cat $d/idProduct) $(cat $d/manufacturer 2>/dev/null)/$(cat $d/product 2>/dev/null)" >> $L; done
-done
-dmesg 2>/dev/null | tail -40 | grep -iE "usb|typec|max77705|ccic|dwc3|otg|role|vbus" >> $L
-echo device > $P/data_role 2>/dev/null
-echo $U > $G/UDC; sleep 1; snap restored
+for d in /sys/bus/usb/devices/[0-9]*-[0-9]*:*; do echo "IF $(basename $d) class=$(cat $d/bInterfaceClass)/$(cat $d/bInterfaceSubClass)/$(cat $d/bInterfaceProtocol) eps=$(cat $d/bNumEndpoints)" >> $L; done
+dmesg | grep -iE "usb [0-9]|new .*speed|device descriptor|enumerat|cdc|ncm|iap|otg_on|vbus|set_host|dr_set" | tail -40 >> $L
+echo 1 > $O/id; echo "$(t) wrote id=1 rc=$?" >> $L
+sleep 3; snap after
+rmdir /data/local/tmp/swap.lock
