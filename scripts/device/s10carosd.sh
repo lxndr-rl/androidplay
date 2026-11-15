@@ -33,11 +33,12 @@ setids() {   # vid pid manufacturer product serial (UDC cycle only)
 }
 # Android's USB service rebuilds the gadget configuration whenever it changes mode (e.g. when Zlink's AOA `40 35` makes it enter
 # accessory mode); that drops our link. Put it back (and rebuild the FunctionFS side if the daemon or the function is gone).
-ensure_composed() {
-  [ -e $G/configs/b.1/s10_carplay ] && [ -d $G/functions/ffs.carplay ] && [ -n "$(pidof ffs_probe)" ] && return 0
+ensure_composed() {   # $1 = force: also strip links Android added (accessory function etc.) so the radio sees only adb + ours
+  if [ "$1" != force ] && [ -e $G/configs/b.1/s10_carplay ] && [ -d $G/functions/ffs.carplay ] && [ -n "$(pidof ffs_probe)" ]; then return 0; fi
   log "recompose: link=$([ -e $G/configs/b.1/s10_carplay ] && echo yes || echo NO) fn=$([ -d $G/functions/ffs.carplay ] && echo yes || echo NO) ffs_probe=$([ -n "$(pidof ffs_probe)" ] && echo yes || echo NO)"
   echo "" > $G/UDC; sleep 1
   for p in $(pidof ffs_probe 2>/dev/null); do kill $p; done; umount /dev/ffs-carplay 2>/dev/null
+  for l in $G/configs/b.1/*; do [ -L $l ] || continue; case "$(basename $l)" in function0) ;; *) log "removing foreign link $(basename $l)"; rm -f $l;; esac; done
   rm -f $G/configs/b.1/s10_carplay; rmdir $G/functions/ffs.carplay 2>/dev/null
   mkdir $G/functions/ffs.carplay
   S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 > $D/ffs_events.log 2>&1 &
@@ -50,7 +51,10 @@ ensure_composed() {
 to_adb()     { setids 0x04e8 0x685d samsung SM-G975F "$SER_ORIG"; echo adb > $STATE; log "state ADB"; }
 to_carplay() { setids 0x05ac 0x12a8 "Apple Inc." iPhone "$SER_APPLE"; echo carplay > $STATE; CP_SINCE=$(cut -d. -f1 /proc/uptime); log "state CARPLAY ($1)"; }
 
+kill_tracers() { for p in $(ps -A -o PID,ARGS | grep "[c]at /sys/kernel/tracing/trace_pipe" | awk '{print $1}'); do kill $p 2>/dev/null; done; }
+
 stop_all() {
+  kill_tracers
   touch $D/s10carosd.stop
   [ -f $PIDF ] && kill $(cat $PIDF) 2>/dev/null
   for n in ffs_probe; do for p in $(pidof $n 2>/dev/null); do kill $p 2>/dev/null; done; done
@@ -63,8 +67,11 @@ stop_all() {
   log "stopped, stock config restored (udc=$(cat $G/UDC))"
 }
 
+# The real device serial, never the value currently on the gadget (that may already be the Apple one, which is how a wrong
+# "original" got saved once).
+real_serial() { s=$(getprop ro.boot.serialno); [ -z "$s" ] && s=$(getprop ro.serialno); echo "$s"; }
 case "$1" in
-stop) SER_ORIG=$(cat $G/strings/0x409/serialnumber); stop_all; exit 0;;
+stop) SER_ORIG=$(real_serial); stop_all; exit 0;;
 status) echo "state=$(cat $STATE 2>/dev/null) pid=$(cat $PIDF 2>/dev/null) udc=$(cat $G/UDC) ids=$(cat $G/idVendor):$(cat $G/idProduct) cfg=$(ls $G/configs/b.1 | tr '\n' ' ')"; tail -5 $LOG 2>/dev/null; exit 0;;
 start) ;;
 *) echo "usage: $0 start|stop|status"; exit 2;;
@@ -74,7 +81,7 @@ esac
 [ -f $OFF ] && { echo "kill switch present ($OFF)"; exit 1; }
 rm -f $D/s10carosd.stop
 echo $$ > $PIDF
-SER_ORIG=$(cat $G/strings/0x409/serialnumber)
+SER_ORIG=$(real_serial)
 SER_APPLE=00008030-001A2B3C4D5E6F78    # iPhone-style 25-char serial (made-up value)
 log "start: ids=$(cat $G/idVendor):$(cat $G/idProduct) udc=$(cat $G/UDC) serial_orig=$SER_ORIG"
 
@@ -89,6 +96,7 @@ echo adb > $STATE
 log "composed; state ADB (cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"
 
 # trace: remember the head unit's probes (AOA getProtocol c0 33 / Apple c0 53) in flag files
+kill_tracers
 echo 0 > $T/tracing_on 2>/dev/null; echo > $T/trace
 echo 1 > $T/events/dwc3/dwc3_ctrl_req/enable; echo 1 > $T/tracing_on
 rm -f $D/s10.aoa $D/s10.apple; : > $D/s10carosd.ctrl.log; CN=0
@@ -121,6 +129,11 @@ while :; do
   TICK=$((TICK+1))
   if [ $((TICK % 30)) = 0 ]; then log "alive: state=$S udc=$(cat $G/UDC) udc_state=$(cat /sys/class/udc/$UDC/state 2>/dev/null) ids=$(cat $G/idVendor):$(cat $G/idProduct) link=$([ -e $G/configs/b.1/s10_carplay ] && echo yes || echo NO) trace_on=$(cat $T/tracing_on)"; fi
   if [ "$S" = adb ]; then
+    # Android entered accessory mode (ids 18d1:xxxx) because a head unit asked for it: that is an AOA probe even if the
+    # trace missed it. Note it once per episode.
+    if [ "$(cat $G/idVendor)" = 0x18d1 ] && [ ! -f $D/s10.switching ]; then
+      [ -f $D/s10.aoa ] || { log "ids are $(cat $G/idVendor):$(cat $G/idProduct) (accessory mode): treating as an AOA probe"; touch $D/s10.aoa; }
+    fi
     # keep our function linked in ADB state too (the HAL drops it on every mode change); only when nothing else is going on
     if [ ! -e $G/configs/b.1/s10_carplay ] && [ ! -f $D/s10.aoa ] && [ ! -f $D/s10.switching ]; then MISS=$((MISS+1)); else MISS=0; fi
     if [ $MISS -ge 8 ]; then MISS=0; touch $D/s10.switching; ensure_composed; rm -f $D/s10.switching; fi
@@ -143,7 +156,7 @@ while :; do
       if [ "$NOSWITCH" = 1 ]; then log "NOSWITCH: would switch to CARPLAY now"; else
         touch $D/s10.switching
         sleep 3                       # let Android finish its accessory-mode attempt and settle back to adb
-        ensure_composed
+        ensure_composed force
         to_carplay "head unit probed us (AOA)"; rm -f $D/s10.switching
       fi
     fi
@@ -154,7 +167,8 @@ while :; do
       touch $D/s10.switching; to_adb; rm -f $D/s10.switching; continue
     fi
     # cable pulled while waiting for a radio: back to ADB at once, before a PC can be plugged in and see Apple ids
-    if [ "$(cat /sys/class/udc/$UDC/state 2>/dev/null)" = "not attached" ]; then NA=$((NA+1)); else NA=0; fi
+    # (not during the first 6 s: the radio re-enumerates after our id switch and the UDC is briefly not attached then)
+    if [ "$(cat /sys/class/udc/$UDC/state 2>/dev/null)" = "not attached" ] && [ $(( $(cut -d. -f1 /proc/uptime) - CP_SINCE )) -ge 6 ]; then NA=$((NA+1)); else NA=0; fi
     if [ $NA -ge 2 ]; then
       log "cable gone while in CARPLAY: back to ADB"
       NA=0; touch $D/s10.switching; to_adb; rm -f $D/s10.switching; continue
