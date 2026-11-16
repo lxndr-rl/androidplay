@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# S10CarOS host verification for building LineageOS 23.2 (beyond2lte).
+# AndroidPlay host verification for building LineageOS 23.2 (beyond2lte).
 # Thresholds come from wiki.lineageos.org/devices/beyond2lte/build (checked 2026-11-14):
 #   64 GB RAM and 400 GB storage "for lineage-21 and up". Override with env vars.
 # Exit code: 0 all requirements met, 1 one or more unmet.
 set -u
 export PATH="$HOME/bin:$PATH"
-SRC_DIR="${S10CAROS_SRC:-$HOME/android/lineage}"
-MIN_DISK_GB="${S10CAROS_MIN_DISK_GB:-400}"
-MIN_RAM_GB="${S10CAROS_MIN_RAM_GB:-64}"
-MIN_CORES="${S10CAROS_MIN_CORES:-4}"
+SRC_DIR="${ANDROIDPLAY_SRC:-$HOME/android/lineage}"
+MIN_DISK_GB="${ANDROIDPLAY_MIN_DISK_GB:-400}"
+MIN_RAM_GB="${ANDROIDPLAY_MIN_RAM_GB:-64}"
+MIN_CORES="${ANDROIDPLAY_MIN_CORES:-4}"
 fail=0
 ok()   { printf '[ OK ] %s\n' "$*"; }
 bad()  { printf '[FAIL] %s\n' "$*"; fail=1; }

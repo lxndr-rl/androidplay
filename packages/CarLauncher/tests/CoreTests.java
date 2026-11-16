@@ -1,7 +1,7 @@
-import com.s10caros.launcher.core.*;
-import com.s10caros.launcher.core.ConnectionPolicy.Action;
-import com.s10caros.launcher.core.ConnectionPolicy.Event;
-import com.s10caros.launcher.core.ConnectionPolicy.State;
+import dev.lxndr.launcher.core.*;
+import dev.lxndr.launcher.core.ConnectionPolicy.Action;
+import dev.lxndr.launcher.core.ConnectionPolicy.Event;
+import dev.lxndr.launcher.core.ConnectionPolicy.State;
 import java.io.ByteArrayInputStream;
 import java.util.*;
 
@@ -63,9 +63,9 @@ public class CoreTests {
         // ---- AppFilter ----
         List<AppFilter.Entry> apps = Arrays.asList(
             new AppFilter.Entry("org.maps", "Maps"), new AppFilter.Entry("org.music", "music"),
-            new AppFilter.Entry("com.s10caros.launcher", "Launcher"), new AppFilter.Entry("org.zed", "Zed"),
+            new AppFilter.Entry("dev.lxndr.launcher", "Launcher"), new AppFilter.Entry("org.zed", "Zed"),
             new AppFilter.Entry("org.maps", "Maps dup"), new AppFilter.Entry("org.secret", "Secret"));
-        List<AppFilter.Entry> out = AppFilter.arrange(apps, Arrays.asList("org.zed", "org.absent", "org.maps"), Arrays.asList("org.secret"), "com.s10caros.launcher");
+        List<AppFilter.Entry> out = AppFilter.arrange(apps, Arrays.asList("org.zed", "org.absent", "org.maps"), Arrays.asList("org.secret"), "dev.lxndr.launcher");
         List<String> pk = new ArrayList<>(); for (AppFilter.Entry e : out) pk.add(e.pkg);
         check(pk.equals(Arrays.asList("org.zed", "org.maps", "org.music")), "pinned first, rest sorted, hidden/self/dup removed: " + pk);
 

@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
-# S10CarOS: sync LineageOS and build beyond2lte. GUARDED: needs S10CAROS_CONFIRM_BUILD=1.
+# AndroidPlay: sync LineageOS and build beyond2lte. GUARDED: needs ANDROIDPLAY_CONFIRM_BUILD=1.
 # Commands: init | sync | build | all   (default: all)
-# Env: S10CAROS_SRC (default ~/android/lineage), S10CAROS_BRANCH (default lineage-23.2),
-#      S10CAROS_JOBS (repo sync jobs, default 4), S10CAROS_SKIP_VERIFY=1 to bypass host check.
+# Env: ANDROIDPLAY_SRC (default ~/android/lineage), ANDROIDPLAY_BRANCH (default lineage-23.2),
+#      ANDROIDPLAY_JOBS (repo sync jobs, default 4), ANDROIDPLAY_SKIP_VERIFY=1 to bypass host check.
 # Real sync is >100 GB download; the full build needs the disk/RAM that verify.sh checks.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
-SRC="${S10CAROS_SRC:-$HOME/android/lineage}"
-BRANCH="${S10CAROS_BRANCH:-lineage-23.2}"
-JOBS="${S10CAROS_JOBS:-4}"
+SRC="${ANDROIDPLAY_SRC:-$HOME/android/lineage}"
+BRANCH="${ANDROIDPLAY_BRANCH:-lineage-23.2}"
+JOBS="${ANDROIDPLAY_JOBS:-4}"
 CMD="${1:-all}"
 
-if [ "${S10CAROS_CONFIRM_BUILD:-}" != "1" ]; then
-    echo "REFUSING: set S10CAROS_CONFIRM_BUILD=1 to run (downloads >100 GB, needs 64 GB RAM / 400 GB disk)." >&2
+if [ "${ANDROIDPLAY_CONFIRM_BUILD:-}" != "1" ]; then
+    echo "REFUSING: set ANDROIDPLAY_CONFIRM_BUILD=1 to run (downloads >100 GB, needs 64 GB RAM / 400 GB disk)." >&2
     exit 3
 fi
 case "$CMD" in init|sync|build|all) ;; *) echo "usage: $0 [init|sync|build|all]" >&2; exit 2 ;; esac
 export PATH="$HOME/bin:$PATH"
 command -v repo >/dev/null || { echo "repo missing: run scripts/setup.sh" >&2; exit 1; }
 
-if [ "${S10CAROS_SKIP_VERIFY:-}" != "1" ]; then
-    "$HERE/verify.sh" || { echo "verify.sh failed; fix or set S10CAROS_SKIP_VERIFY=1 (and lower S10CAROS_MIN_*)" >&2; exit 1; }
+if [ "${ANDROIDPLAY_SKIP_VERIFY:-}" != "1" ]; then
+    "$HERE/verify.sh" || { echo "verify.sh failed; fix or set ANDROIDPLAY_SKIP_VERIFY=1 (and lower ANDROIDPLAY_MIN_*)" >&2; exit 1; }
 fi
 
 do_init() {
     mkdir -p "$SRC"; cd "$SRC"
     repo init -u https://github.com/LineageOS/android.git -b "$BRANCH" --git-lfs --no-clone-bundle
     mkdir -p .repo/local_manifests
-    cp "$ROOT/manifests/local_manifests/s10caros.xml" .repo/local_manifests/s10caros.xml
+    cp "$ROOT/manifests/local_manifests/androidplay.xml" .repo/local_manifests/androidplay.xml
 }
 do_sync() { cd "$SRC"; repo sync -j"$JOBS" -c --no-tags --no-clone-bundle; }
 do_build() {

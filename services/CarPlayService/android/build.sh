@@ -6,7 +6,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 NDK="${ANDROID_NDK_ROOT:-$(ls -d "$SDK"/ndk/* | sort -V | tail -1)}"
 CMAKE="$(ls "$SDK"/cmake/*/bin/cmake | tail -1)"; NINJA="$(dirname "$CMAKE")/ninja"
-OUT="${S10CAROS_BUILD_DIR:-$HERE/../../../.build}/jni"
+OUT="${ANDROIDPLAY_BUILD_DIR:-$HERE/../../../.build}/jni"
 for ABI in ${ABIS:-x86_64 arm64-v8a}; do
   "$CMAKE" -S "$HERE" -B "$OUT/$ABI-build" -G Ninja -DCMAKE_MAKE_PROGRAM="$NINJA" \
     -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI="$ABI" -DANDROID_PLATFORM=android-29 \

@@ -1,4 +1,4 @@
-# Duende
+# AndroidPlay
 
 Turn an Android phone into a wired-CarPlay **source** for your car radio: the radio thinks it is talking to an iPhone, and
 shows an Android UI instead (launcher, Waze, Spotify, video, maps), with touch, audio and a dark car-friendly home screen.
@@ -34,7 +34,7 @@ Not verified, do not assume:
 | `services/Projector`, `services/ProjectionService` | virtual display, H.264 encoder, panel policy, audio tap |
 | `services/InputBridge` | touch injector, gesture filter |
 | `packages/CarLauncher` | home screen, splash, Back/Home capsule |
-| `scripts/device/s10carosd.sh` | on-phone mode manager (ADB / CarPlay, armed state) |
+| `scripts/device/androidplayd.sh` | on-phone mode manager (ADB / CarPlay, armed state) |
 | `tests/hardware` | bench and radio test scripts |
 | `docs`, `research` | architecture, mode manager, evidence, protocol notes, legal notes |
 
@@ -46,5 +46,3 @@ Wired CarPlay requires Apple's MFi authentication; this project **does not** byp
 USB ids is an opt-in experiment for the owner's own radio and is kept out of any release image (see
 [research/licensing.md](research/licensing.md) and `LEGAL-001` in [TASKS.md](TASKS.md)). "CarPlay" and "iPhone" are
 Apple trademarks; this project is not affiliated with Apple. Nothing here touches `/system`, `/vendor` or boot partitions.
-
-Internal identifiers (`com.s10caros.*`, `s10carosd`) are from the working name and will be renamed.

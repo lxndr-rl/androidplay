@@ -3,7 +3,7 @@
 #   apk : compile the Android shell against android.jar, dex, link manifest, sign with a throwaway debug key.
 set -eu
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="${S10CAROS_BUILD_DIR:-$HERE/../../.build}/projection"
+OUT="${ANDROIDPLAY_BUILD_DIR:-$HERE/../../.build}/projection"
 SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 mkdir -p "$OUT"
 
@@ -26,7 +26,7 @@ apk)
   [ -d "$OUT/apk/lib" ] && (cd "$OUT/apk" && zip -q -0 -r "$OUT/unsigned.apk" lib)
   "$BT/zipalign" -p -f 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
   KS="$OUT/debug.keystore"
-  [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias s10debug -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=S10CarOS debug" >/dev/null 2>&1
+  [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias s10debug -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=AndroidPlay debug" >/dev/null 2>&1
   "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$OUT/ProjectionService-debug.apk" "$OUT/aligned.apk"
   "$BT/apksigner" verify "$OUT/ProjectionService-debug.apk"
   echo "$OUT/ProjectionService-debug.apk"

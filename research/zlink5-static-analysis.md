@@ -14,6 +14,6 @@ Everything below is "strings present in the binary", not observed behaviour. Whe
 - `libusbmuxd.so` is a real usbmuxd build run as a daemon (`/dev/z-usbmuxd -f&`) with a local TCP forward (`forward: local=%d, remote=%d`, "no connected phone"). Its purpose in the CarPlay path is NOT established: it may serve an iOS companion app or lockdown pairing.
 - Wireless: `Got a wireless carplay device`, bonjour/mDNS (libzmdnsd), `get_wireless_ip_addr`.
 
-## Consequence for Duende (hypothesis, from the above)
+## Consequence for AndroidPlay (hypothesis, from the above)
 - Zlink5 appears to implement wired CarPlay as the role-swap model (Model 1): control request to the iPhone, HU switches to gadget (iAP2 + NCM), the PHONE becomes USB host. That would need the S10+ to become a USB host toward the radio (USB-003: only rejected against a PC so far) and to talk iAP2 to `/dev/zjinnova_iap2` and NCM, not usbmux. This contradicts the earlier guess that a generic Android radio would use usbmux. Not verified on the radio; the observation log of the phone attached to the radio will tell.
 - A plain Android phone is probed through the Android Auto / AOA path. That alone would explain "connecting" on the radio without any CarPlay involvement.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AndroidPlay local manifest for LineageOS 23.2 (Android 16, android-16.0.0_r4), beyond2lte.
+  Every project below was verified with git ls-remote (heads) on 2026-11-14 to have a
+  lineage-23.2 branch. `breakfast beyond2lte` would resolve the same repos via
+  lineage.dependencies (LineageOS) and TheMuppets; listing them pins them explicitly.
+  Add AndroidPlay-specific repos here only once they exist.
+-->
+<manifest>
+  <remote name="s10lineage" fetch="https://github.com/LineageOS" />
+  <remote name="s10muppets" fetch="https://github.com/TheMuppets" />
+
+  <project name="android_device_samsung_beyond2lte" path="device/samsung/beyond2lte"
+           remote="s10lineage" revision="lineage-23.2" />
+  <project name="android_device_samsung_exynos9820-common" path="device/samsung/exynos9820-common"
+           remote="s10lineage" revision="lineage-23.2" />
+  <project name="android_kernel_samsung_exynos9820" path="kernel/samsung/exynos9820"
+           remote="s10lineage" revision="lineage-23.2" />
+  <project name="proprietary_vendor_samsung_beyond2lte" path="vendor/samsung/beyond2lte"
+           remote="s10muppets" revision="lineage-23.2" clone-depth="1" />
+  <project name="proprietary_vendor_samsung_exynos9820-common" path="vendor/samsung/exynos9820-common"
+           remote="s10muppets" revision="lineage-23.2" clone-depth="1" />
+</manifest>

@@ -4,13 +4,13 @@
 #   dex : compile the privileged injector against android.jar and dex it (run with app_process as shell/system).
 set -eu
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="${S10CAROS_BUILD_DIR:-$HERE/../../.build}/inputbridge"
+OUT="${ANDROIDPLAY_BUILD_DIR:-$HERE/../../.build}/inputbridge"
 SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 mkdir -p "$OUT"
 case "${1:-}" in
 test)
   rm -rf "$OUT/core" && mkdir -p "$OUT/core"
-  javac -Xlint:all -d "$OUT/core" $(find "$HERE/src/com/s10caros/input/core" -name '*.java') "$HERE/tests/MapperTests.java" "$HERE/tests/GestureTests.java"
+  javac -Xlint:all -d "$OUT/core" $(find "$HERE/src/dev/lxndr/input/core" -name '*.java') "$HERE/tests/MapperTests.java" "$HERE/tests/GestureTests.java"
   java -cp "$OUT/core" MapperTests && java -cp "$OUT/core" GestureTests
   ;;
 dex)

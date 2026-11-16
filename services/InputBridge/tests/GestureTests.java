@@ -1,5 +1,5 @@
-import com.s10caros.input.core.GestureFilter;
-import com.s10caros.input.core.GestureFilter.Ev;
+import dev.lxndr.input.core.GestureFilter;
+import dev.lxndr.input.core.GestureFilter.Ev;
 import java.util.ArrayList;
 import java.util.List;
 

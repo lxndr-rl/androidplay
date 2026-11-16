@@ -1,4 +1,4 @@
-# Duende validation
+# AndroidPlay validation
 
 Date of this record: 2026-11-14. Only what was actually run is marked. No phone and no CarPlay radio have been available, so every criterion that needs hardware is **NOT TESTED**.
 
@@ -70,7 +70,7 @@ Not shown, and not claimed:
 
 ### MEDIA-003 touch injection on the emulator (2026-11-14, same AVD)
 
-`services/InputBridge`: pure-Java `TouchMapper` (host-tested: drops MOVE/UP without DOWN, second DOWN becomes MOVE, clamping, release on disconnect) + `InjectMain`, a dex run with `app_process` as the adb shell uid that injects MotionEvents onto a given display through hidden `InputManagerGlobal.injectInputEvent`. Script: `tests/integration/emulator_touch.sh` (refuses non-emulators unless `S10CAROS_ALLOW_DEVICE=1`).
+`services/InputBridge`: pure-Java `TouchMapper` (host-tested: drops MOVE/UP without DOWN, second DOWN becomes MOVE, clamping, release on disconnect) + `InjectMain`, a dex run with `app_process` as the adb shell uid that injects MotionEvents onto a given display through hidden `InputManagerGlobal.injectInputEvent`. Script: `tests/integration/emulator_touch.sh` (refuses non-emulators unless `ANDROIDPLAY_ALLOW_DEVICE=1`).
 
 | Check | Result | Evidence |
 |---|---|---|
@@ -151,7 +151,7 @@ Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hard
 
 - SELinux stays enforcing; the drafted policy (`usb/GadgetManager/android/`) is not compiled against AOSP yet.
 - ADB must not be exposed over the network in vehicle mode (launcher config has no such switch; ROM defaults still to be audited).
-- No automatic flashing: `build.sh` refuses without `S10CAROS_CONFIRM_BUILD=1`; nothing in the repo flashes a device.
+- No automatic flashing: `build.sh` refuses without `ANDROIDPLAY_CONFIRM_BUILD=1`; nothing in the repo flashes a device.
 - The launcher never stores credentials. The MFi certificate/signature from the car is passed to callbacks and is not verified (see CP-005).
 - Thermal and battery protections are never disabled by any script here.
 

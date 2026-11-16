@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.s10caros.launcher">
+    package="dev.lxndr.launcher">
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -19,7 +19,7 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <application
-        android:label="Duende"
+        android:label="AndroidPlay"
         android:allowBackup="false"
         android:supportsRtl="true">
 
@@ -61,7 +61,7 @@
         <service
             android:name=".app.MediaListener"
             android:exported="true"
-            android:label="S10CarOS media"
+            android:label="AndroidPlay media"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />

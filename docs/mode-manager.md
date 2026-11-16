@@ -1,13 +1,13 @@
 # Mode manager: iPhone mode without the PC and ADB without a reboot (design, 2026-11-15)
 
-Status (2026-11-15): **v1 implemented in `scripts/device/s10carosd.sh`, bench-tested with a simulated probe, NOT yet tested with a real radio.**
+Status (2026-11-15): **v1 implemented in `scripts/device/androidplayd.sh`, bench-tested with a simulated probe, NOT yet tested with a real radio.**
 Differences from the first design, learned on the bench: (1) the root cause of the "off the bus until reboot" failures was a bug in
 `GadgetManager::teardown` (fixed, regression test); (2) the PC never recovers a phone that shows Apple ids until the cable is
 replugged (the PC port wedges: "device descriptor read error -110"), so a PC must never see Apple ids; (3) therefore the default state
 is ADB with our FunctionFS function composed next to adb, and CARPLAY (Apple ids) is entered only when a head unit probes us.
 v1 triggers: AOA probe `c0 33` (Zlink). Chevrolet: no trigger known (it sends `c0 53` only after it sees Apple ids).
 v1 returns to ADB: session ended, cable gone while waiting, or 25 s without a radio request. No boot hook (this Lineage has no
-`userinit`): the daemon is started with `scripts/device/s10carosd.sh start` from a root shell; after a reboot the phone is a plain
+`userinit`): the daemon is started with `scripts/device/androidplayd.sh start` from a root shell; after a reboot the phone is a plain
 adb phone (safe default).
 
 ## Problem
@@ -26,14 +26,14 @@ Consequences: a PC can be recognised within about a second while in iPhone mode 
 is recognised in ADB mode by `c0 33`.
 
 ## Proposed behaviour
-Two states for the USB gadget, switched by a small root daemon (`s10carosd`):
+Two states for the USB gadget, switched by a small root daemon (`androidplayd`):
 
 * **ADB** (Samsung ids, adb function, exactly what the HAL builds): the phone is a normal development device.
 * **CARPLAY** (Apple ids + our FunctionFS interface): waiting for a radio's `c0 53`/`40 51`, then the session supervisor
   (`swap_to_host_hook.sh`).
 
 Transitions (each with a hard time limit, so neither state can last forever by mistake):
-1. Boot -> **CARPLAY (armed)** only if the car flag file `s10caros.car` exists, else **ADB** (a freshly flashed or
+1. Boot -> **CARPLAY (armed)** only if the car flag file `androidplay.car` exists, else **ADB** (a freshly flashed or
    unconfigured phone is always a normal phone).
 2. CARPLAY -> **ADB** as soon as the PC pattern (`SET_CONFIGURATION 0` right after 1) is seen, or when a host is attached
    (UDC configured) for 15 s without any `c0 53`/AOA/Apple request, or when the cable is pulled while idle for more than
@@ -42,7 +42,7 @@ Transitions (each with a hard time limit, so neither state can last forever by m
    (AOA probe) is seen.
 4. Session end (radio device disappears, supervisor already handles this) -> back to CARPLAY (armed), which is what makes
    reconnection immediate.
-Manual override without reboot: `touch /data/local/tmp/s10caros.off` (daemon restores ADB and does nothing), `rm` to resume;
+Manual override without reboot: `touch /data/local/tmp/androidplay.off` (daemon restores ADB and does nothing), `rm` to resume;
 reachable from a PC in ADB state, or from a shell on the phone.
 
 ## Where it starts at boot (no /system changes)
@@ -54,9 +54,9 @@ survive nothing else, and are removed with one `rm`. Fallbacks, only if that mec
 ## Safety rules (the constraint is "never lose the ability to get in")
 1. Do not modify /system, /vendor or the boot partitions. Everything lives in `/data/local` and `/data/local/tmp`.
 2. ADB is the default. The daemon never leaves CARPLAY without a timer that returns to ADB.
-3. Kill switch file (`s10caros.off`) is checked every loop; a missing or unreadable state file means ADB.
+3. Kill switch file (`androidplay.off`) is checked every loop; a missing or unreadable state file means ADB.
 4. Boot guard: the boot hook starts the daemon in the background with a 60 s delay and a crash counter in
-   `/data/local/tmp`; after 3 consecutive crashed starts it disables itself (writes `s10caros.off`).
+   `/data/local/tmp`; after 3 consecutive crashed starts it disables itself (writes `androidplay.off`).
 5. Restore path must be proven BEFORE enabling any automatic switching: run ADB -> CARPLAY -> ADB 20 times on the bench
    with the phone on the PC and count failures. Known history: restoring by toggling `sys.usb.config none/adb` after our
    FunctionFS function and ids were applied left the phone off the bus several times; the likely culprits are the removed
@@ -64,7 +64,7 @@ survive nothing else, and are removed with one `rm`. Fallbacks, only if that mec
    with the HAL instead.
 6. Out-of-band recovery that never depends on this work: Lineage recovery (Vol Up + Bixby + Power, `adb sideload`),
    Download mode (Vol Down + Bixby + USB), key-combo reboot (Vol Down + Power ~10 s). Keep them in mind; none is touched.
-7. First deployment is done with the phone on the PC, daemon in ADB state, `s10caros.off` present; remove the file only after
+7. First deployment is done with the phone on the PC, daemon in ADB state, `androidplay.off` present; remove the file only after
    the bench test passes.
 
 ## Open questions (to answer with the phone attached)

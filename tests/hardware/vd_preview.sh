@@ -4,7 +4,7 @@
 set -u
 S=${S10_SERIAL:-}; OUT=$1; SECS=$2; shift 2
 ADB="adb ${S:+-s $S}"
-$ADB shell 'svc power stayon true; input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard; am force-stop com.s10caros.projection; am force-stop com.s10caros.launcher; for p in $(ps -A | grep app_process | awk "{print \$2}"); do kill $p; done; rm -f /data/local/tmp/touch.fifo; mkfifo /data/local/tmp/touch.fifo; chmod 666 /data/local/tmp/touch.fifo; logcat -c'
+$ADB shell 'svc power stayon true; input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard; am force-stop dev.lxndr.projection; am force-stop dev.lxndr.launcher; for p in $(ps -A | grep app_process | awk "{print \$2}"); do kill $p; done; rm -f /data/local/tmp/touch.fifo; mkfifo /data/local/tmp/touch.fifo; chmod 666 /data/local/tmp/touch.fifo; logcat -c'
 $ADB reverse tcp:47500 tcp:47500 >/dev/null
 SINK=$(mktemp -d)/sink.py
 cat > $SINK <<'PY'
@@ -26,12 +26,12 @@ print('AUs',n)
 PY
 python3 -I $SINK $OUT $SECS > $OUT.log 2>&1 &
 sleep 1
-$ADB shell "am start-foreground-service -n com.s10caros.projection/.ProjectionService --ei w 1280 --ei h 720 --ei fps 30 --ei kbps 4000 --ei seconds $((SECS+5)) --es sink 127.0.0.1:47500" >/dev/null 2>&1
+$ADB shell "am start-foreground-service -n dev.lxndr.projection/.ProjectionService --ei w 1280 --ei h 720 --ei fps 30 --ei kbps 4000 --ei seconds $((SECS+5)) --es sink 127.0.0.1:47500" >/dev/null 2>&1
 sleep 3
-D=$($ADB logcat -d -s S10CarOS-PROJ | grep -o "display=[0-9]*" | tail -1 | cut -d= -f2)
+D=$($ADB logcat -d -s AndroidPlay-PROJ | grep -o "display=[0-9]*" | tail -1 | cut -d= -f2)
 echo "display=$D"
-$ADB shell "am start --display $D -n com.s10caros.launcher/.app.LauncherActivity" >/dev/null 2>&1
-$ADB shell "nohup sh -c 'CLASSPATH=/data/local/tmp/inject.dex app_process / com.s10caros.input.shell.InjectMain --display $D --size 1280 720 --listen 47600 < /data/local/tmp/touch.fifo > /data/local/tmp/inject.log 2>&1' > /dev/null 2>&1 &"
+$ADB shell "am start --display $D -n dev.lxndr.launcher/.app.LauncherActivity" >/dev/null 2>&1
+$ADB shell "nohup sh -c 'CLASSPATH=/data/local/tmp/inject.dex app_process / dev.lxndr.input.shell.InjectMain --display $D --size 1280 720 --listen 47600 < /data/local/tmp/touch.fifo > /data/local/tmp/inject.log 2>&1' > /dev/null 2>&1 &"
 sleep 4
 for t in "$@"; do
   $ADB shell "exec 3<>/data/local/tmp/touch.fifo; echo 'D $t' >&3; echo 'S 90' >&3; echo 'U $t' >&3"

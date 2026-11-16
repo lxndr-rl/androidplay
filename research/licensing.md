@@ -57,9 +57,9 @@ Compat key: OK = reusable with notice; COPYLEFT = reusable if we publish source 
 5. **Dependency licence gap**: carjack (permissive) depends on catplay (unlicensed). OkCarLink (MIT) depends on a binary dependency bundle. Verify before adoption.
 6. **Provenance doubt**: OkCarLink uses OkcarOS internal names; CarDroid contains Okcar and MFi-named classes. Confirm no vendor-confidential code or keys before anything is used.
 7. **Identity and trademark**: Apple VID 0x05AC, "Apple Inc.", "iPhone" strings in USB descriptors, and use of MFi concepts. Not a copyright issue but a legal-risk one. Agents A/B/C should avoid hard-coding Apple serials or keys, and AGENTS.md already bans MFi bypass and extracted keys.
-8. **Public-key files**: the OkcarOS tree contains `okcardev.x509.pem` and `okcarprod.x509.pem` public certificates. They are used only to trust Okcar OTA and recovery packages and must not be reused as Duende trust anchors.
+8. **Public-key files**: the OkcarOS tree contains `okcardev.x509.pem` and `okcarprod.x509.pem` public certificates. They are used only to trust Okcar OTA and recovery packages and must not be reused as AndroidPlay trust anchors.
 
-## 4. Recommended licence posture for Duende
+## 4. Recommended licence posture for AndroidPlay
 
 - Kernel and USB gadget functions: GPL-2.0-only, new files with SPDX headers, keep upstream copyright for anything derived from Google's `f_accessory.c`.
 - Services: Apache-2.0 or MIT for our own code, so permissive upstreams (scrcpy, carjack if catplay is resolved, OkCarLink after review, CarDeck) can be absorbed.

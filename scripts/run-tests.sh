@@ -5,7 +5,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STRICT=0; [ "${1:-}" = "--strict" ] && STRICT=1
-BUILD="${S10CAROS_BUILD_DIR:-$ROOT/.build}"
+BUILD="${ANDROIDPLAY_BUILD_DIR:-$ROOT/.build}"
 SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 pass=0; fail=0; skip=0
 declare -a REPORT
@@ -53,7 +53,7 @@ if [ -x "$ROOT/services/InputBridge/build.sh" ]; then
   else skipit inputbridge-core "javac missing"; fi
 fi
 
-echo "=== S10CarOS Level-1 test report ($(date -u +%FT%TZ)) ==="
+echo "=== AndroidPlay Level-1 test report ($(date -u +%FT%TZ)) ==="
 printf '%s\n' "${REPORT[@]}"
 echo "pass=$pass fail=$fail skip=$skip"
 [ $fail -eq 0 ] && { [ $STRICT -eq 0 ] || [ $skip -eq 0 ]; }

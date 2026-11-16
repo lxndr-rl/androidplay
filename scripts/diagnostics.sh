@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# S10CarOS device diagnostics. Read-only: collects state over adb into a timestamped directory.
+# AndroidPlay device diagnostics. Read-only: collects state over adb into a timestamped directory.
 # Works with no device (reports it and exits 0). Never flashes, never changes settings.
 # Usage: scripts/diagnostics.sh [-s SERIAL] [-o OUTDIR]
 set -u
@@ -33,7 +33,7 @@ adbsh() { "${A[@]}" shell "$@" 2>&1; }
 model="$(grep '^model=' "$OUT/identity.txt" | cut -d= -f2)"
 case "$model" in SM-G975F*|SM-G975N*) echo "model OK for target: $model";; *) echo "WARNING: model '$model' is not SM-G975F/SM-G975N; do NOT use beyond2lte procedures";; esac
 
-adbsh getprop | grep -E 'sys\.usb|persist\.sys\.usb|init\.svc\..*(gadget|usb)|s10caros' >"$OUT/usb-props.txt"
+adbsh getprop | grep -E 'sys\.usb|persist\.sys\.usb|init\.svc\..*(gadget|usb)|androidplay' >"$OUT/usb-props.txt"
 adbsh 'for g in /config/usb_gadget/*; do echo "== $g"; cat $g/UDC 2>/dev/null; ls $g/functions $g/configs/*/ 2>/dev/null; done' >"$OUT/configfs.txt"
 adbsh 'ls /sys/class/udc 2>/dev/null; for u in /sys/class/udc/*; do echo "$u state=$(cat $u/state 2>/dev/null) speed=$(cat $u/current_speed 2>/dev/null)"; done' >"$OUT/udc.txt"
 adbsh 'for t in /sys/class/typec/*; do echo "== $t"; for f in data_role power_role power_operation_mode vconn_source; do echo "$f=$(cat $t/$f 2>/dev/null)"; done; done' >"$OUT/typec.txt"

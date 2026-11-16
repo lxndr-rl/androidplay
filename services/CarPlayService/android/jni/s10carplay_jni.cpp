@@ -11,7 +11,7 @@
 #include <random>
 #include <thread>
 
-#define LOG(...) __android_log_print(ANDROID_LOG_INFO, "S10CarOS-CP", __VA_ARGS__)
+#define LOG(...) __android_log_print(ANDROID_LOG_INFO, "AndroidPlay-CP", __VA_ARGS__)
 using namespace s10::airplay;
 
 namespace {
@@ -97,7 +97,7 @@ Session* from(jlong h) { return reinterpret_cast<Session*>(h); }
 
 extern "C" {
 
-JNIEXPORT jlong JNICALL Java_com_s10caros_projection_CarPlayNative_create(JNIEnv* env, jclass, jobject listener) {
+JNIEXPORT jlong JNICALL Java_dev_lxndr_projection_CarPlayNative_create(JNIEnv* env, jclass, jobject listener) {
     auto* s = new Session();
     env->GetJavaVM(&s->vm);
     s->listener = env->NewGlobalRef(listener);
@@ -107,7 +107,7 @@ JNIEXPORT jlong JNICALL Java_com_s10caros_projection_CarPlayNative_create(JNIEnv
     return reinterpret_cast<jlong>(s);
 }
 
-JNIEXPORT void JNICALL Java_com_s10caros_projection_CarPlayNative_start(JNIEnv* env, jclass, jlong h, jstring host, jint port) {
+JNIEXPORT void JNICALL Java_dev_lxndr_projection_CarPlayNative_start(JNIEnv* env, jclass, jlong h, jstring host, jint port) {
     Session* s = from(h);
     const char* c = env->GetStringUTFChars(host, nullptr);
     s->host = c; env->ReleaseStringUTFChars(host, c);
@@ -115,7 +115,7 @@ JNIEXPORT void JNICALL Java_com_s10caros_projection_CarPlayNative_start(JNIEnv* 
     s->th = std::thread(run, s);
 }
 
-JNIEXPORT void JNICALL Java_com_s10caros_projection_CarPlayNative_pushVideo(JNIEnv* env, jclass, jlong h, jbyteArray data, jint len) {
+JNIEXPORT void JNICALL Java_dev_lxndr_projection_CarPlayNative_pushVideo(JNIEnv* env, jclass, jlong h, jbyteArray data, jint len) {
     Session* s = from(h);
     std::vector<uint8_t> b(static_cast<size_t>(len));
     env->GetByteArrayRegion(data, 0, len, reinterpret_cast<jbyte*>(b.data()));
@@ -125,7 +125,7 @@ JNIEXPORT void JNICALL Java_com_s10caros_projection_CarPlayNative_pushVideo(JNIE
     s->video.push_back(std::move(b));
 }
 
-JNIEXPORT void JNICALL Java_com_s10caros_projection_CarPlayNative_pushAudio(JNIEnv* env, jclass, jlong h, jbyteArray data, jint len) {
+JNIEXPORT void JNICALL Java_dev_lxndr_projection_CarPlayNative_pushAudio(JNIEnv* env, jclass, jlong h, jbyteArray data, jint len) {
     Session* s = from(h);
     std::vector<uint8_t> b(static_cast<size_t>(len));
     env->GetByteArrayRegion(data, 0, len, reinterpret_cast<jbyte*>(b.data()));
@@ -135,7 +135,7 @@ JNIEXPORT void JNICALL Java_com_s10caros_projection_CarPlayNative_pushAudio(JNIE
     s->audio.push_back(std::move(b));
 }
 
-JNIEXPORT jstring JNICALL Java_com_s10caros_projection_CarPlayNative_status(JNIEnv* env, jclass, jlong h) {
+JNIEXPORT jstring JNICALL Java_dev_lxndr_projection_CarPlayNative_status(JNIEnv* env, jclass, jlong h) {
     Session* s = from(h);
     std::lock_guard<std::mutex> g(s->m);
     std::string t = s->status + " videoIn=" + std::to_string(s->videoIn.load()) + " droppedVideo=" + std::to_string(s->droppedVideo.load()) +
@@ -143,7 +143,7 @@ JNIEXPORT jstring JNICALL Java_com_s10caros_projection_CarPlayNative_status(JNIE
     return env->NewStringUTF(t.c_str());
 }
 
-JNIEXPORT void JNICALL Java_com_s10caros_projection_CarPlayNative_destroy(JNIEnv* env, jclass, jlong h) {
+JNIEXPORT void JNICALL Java_dev_lxndr_projection_CarPlayNative_destroy(JNIEnv* env, jclass, jlong h) {
     Session* s = from(h);
     s->stop = true;
     if (s->th.joinable()) s->th.join();

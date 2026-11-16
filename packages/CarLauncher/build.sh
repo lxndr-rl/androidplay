@@ -4,14 +4,14 @@
 #   apk : compile the Android shell against android.jar, dex, link manifest, sign with a throwaway debug key.
 set -eu
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="${S10CAROS_BUILD_DIR:-$HERE/../../.build}/carlauncher"
+OUT="${ANDROIDPLAY_BUILD_DIR:-$HERE/../../.build}/carlauncher"
 SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 mkdir -p "$OUT"
 
 case "${1:-}" in
 test)
   rm -rf "$OUT/core" && mkdir -p "$OUT/core"
-  javac -Xlint:all -d "$OUT/core" $(find "$HERE/src/com/s10caros/launcher/core" -name '*.java') "$HERE/tests/CoreTests.java"
+  javac -Xlint:all -d "$OUT/core" $(find "$HERE/src/dev/lxndr/launcher/core" -name '*.java') "$HERE/tests/CoreTests.java"
   java -cp "$OUT/core" CoreTests
   ;;
 apk)
@@ -26,7 +26,7 @@ apk)
   (cd "$OUT/dex" && zip -q -j "$OUT/unsigned.apk" classes.dex)
   "$BT/zipalign" -f 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
   KS="$OUT/debug.keystore"
-  [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias s10debug -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=S10CarOS debug" >/dev/null 2>&1
+  [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias s10debug -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=AndroidPlay debug" >/dev/null 2>&1
   "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$OUT/CarLauncher-debug.apk" "$OUT/aligned.apk"
   "$BT/apksigner" verify "$OUT/CarLauncher-debug.apk"
   echo "$OUT/CarLauncher-debug.apk"

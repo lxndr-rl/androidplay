@@ -4,7 +4,7 @@
 #   tone: test-fixture APK that plays a 440 Hz tone -> .build/audiobridge/ToneTest-debug.apk
 set -eu
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="${S10CAROS_BUILD_DIR:-$HERE/../../.build}/audiobridge"
+OUT="${ANDROIDPLAY_BUILD_DIR:-$HERE/../../.build}/audiobridge"
 SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
 BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"
 JAR="$(ls -d "$SDK"/platforms/android-* | sort -V | tail -1)/android.jar"
@@ -23,7 +23,7 @@ tone)
   cp "$OUT/tone-base.apk" "$OUT/tone-unsigned.apk"; (cd "$OUT/td" && zip -q -j "$OUT/tone-unsigned.apk" classes.dex)
   "$BT/zipalign" -f 4 "$OUT/tone-unsigned.apk" "$OUT/tone-aligned.apk"
   KS="$OUT/debug.keystore"
-  [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias s10debug -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=S10CarOS debug" >/dev/null 2>&1
+  [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias s10debug -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=AndroidPlay debug" >/dev/null 2>&1
   "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$OUT/ToneTest-debug.apk" "$OUT/tone-aligned.apk"
   echo "$OUT/ToneTest-debug.apk" ;;
 *) echo "usage: $0 dex|tone"; exit 2;;

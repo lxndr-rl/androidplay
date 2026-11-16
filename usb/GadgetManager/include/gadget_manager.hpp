@@ -1,4 +1,4 @@
-// S10CarOS GadgetManager core: ConfigFS gadget builder, FunctionFS descriptor
+// AndroidPlay GadgetManager core: ConfigFS gadget builder, FunctionFS descriptor
 // blobs and the EP0 role-switch request handler. No Android dependencies.
 #pragma once
 #include <cstdint>

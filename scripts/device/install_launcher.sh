@@ -5,7 +5,7 @@
 set -eu
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APK="$HERE/.build/carlauncher/CarLauncher-debug.apk"
-P=com.s10caros.launcher
+P=dev.lxndr.launcher
 [ -f "$APK" ] || { echo "build first: packages/CarLauncher/build.sh apk"; exit 1; }
 adb install -r "$APK"
 for perm in ACCESS_FINE_LOCATION READ_PHONE_STATE POST_NOTIFICATIONS; do adb shell pm grant $P android.permission.$perm || echo "grant $perm failed"; done

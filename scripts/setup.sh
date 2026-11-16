@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# S10CarOS host setup: installs LineageOS 23.2 build deps (Ubuntu/Debian), `repo`, git-lfs.
+# AndroidPlay host setup: installs LineageOS 23.2 build deps (Ubuntu/Debian), `repo`, git-lfs.
 # Package list: wiki.lineageos.org/devices/beyond2lte/build (checked 2026-11-14); all names
 # confirmed present in Ubuntu 24.04 apt. Idempotent. Needs sudo for apt.
 # Usage: scripts/setup.sh [--dry-run]

@@ -1,5 +1,5 @@
-import com.s10caros.input.core.TouchMapper;
-import com.s10caros.input.core.TouchMapper.Out;
+import dev.lxndr.input.core.TouchMapper;
+import dev.lxndr.input.core.TouchMapper.Out;
 
 public class MapperTests {
     static int fails = 0;

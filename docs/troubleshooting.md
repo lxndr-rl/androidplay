@@ -8,7 +8,7 @@ First step for any device problem: `scripts/diagnostics.sh` (read-only, adb) and
 |---|---|
 | `scripts/run-tests.sh` reports SKIP | a tool is missing (cmake/javac/make); `scripts/setup.sh --dry-run` lists what it would install; `--strict` makes SKIP fail |
 | `verify.sh` exits 1 | host below ROM-build specs (RAM/disk/tools). Expected on this workstation. |
-| `build.sh` prints REFUSING | by design: set `S10CAROS_CONFIRM_BUILD=1` after reading what it will download |
+| `build.sh` prints REFUSING | by design: set `ANDROIDPLAY_CONFIRM_BUILD=1` after reading what it will download |
 
 ## Issues already hit while testing (and their fixes)
 

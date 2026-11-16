@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.s10caros.projection">
+    package="dev.lxndr.projection">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <application android:label="S10CarOS Projection" android:allowBackup="false">
+    <application android:label="AndroidPlay Projection" android:allowBackup="false">
         <!-- Only holders of DUMP (the adb shell) may start it: this probe build has no other caller. -->
         <service
             android:name=".ProjectionService"

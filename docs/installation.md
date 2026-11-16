@@ -7,16 +7,16 @@ This page deliberately contains no flashing commands of its own. The only author
 1. `scripts/diagnostics.sh` shows the model is SM-G975F, SM-G975F/DS or SM-G975N. Anything else: stop.
 2. Data you care about is backed up (bootloader unlock wipes the phone).
 3. A rollback exists: stock firmware for the exact model and region, plus the stock Android 12 base the wiki requires.
-4. You (not an agent or script) run every flashing step. Nothing in this repository flashes a device; `build.sh` only builds, behind `S10CAROS_CONFIRM_BUILD=1`.
+4. You (not an agent or script) run every flashing step. Nothing in this repository flashes a device; `build.sh` only builds, behind `ANDROIDPLAY_CONFIRM_BUILD=1`.
 
-## Two ways to get Duende
+## Two ways to get AndroidPlay
 
 | Path | What it needs | Status |
 |---|---|---|
-| A. Official LineageOS 23.2 nightly + Duende layered on top (apps/services; privileged parts as a system overlay) | the official zip (about 1.2 GB), recovery, the wiki procedure | the layer does not exist yet: privileged installation of ProjectionService/gadget daemon/SELinux is unwritten |
+| A. Official LineageOS 23.2 nightly + AndroidPlay layered on top (apps/services; privileged parts as a system overlay) | the official zip (about 1.2 GB), recovery, the wiki procedure | the layer does not exist yet: privileged installation of ProjectionService/gadget daemon/SELinux is unwritten |
 | B. Build the ROM from source with the local manifest | 64 GB RAM / 400 GB disk machine, `scripts/setup.sh`, `scripts/verify.sh`, `scripts/build.sh` | never run; this workstation is too small |
 
-## Duende configuration (after boot)
+## AndroidPlay configuration (after boot)
 
 `config.properties` (see `ModeConfig`): `mode=config|vehicle`, `reconnect.initial_ms`, `reconnect.max_ms`, `stable_ms`, `apps.pinned`, `apps.hidden`. Default is config mode. Invalid files fall back to safe defaults and show an error count on the launcher banner.
 
