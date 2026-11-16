@@ -145,7 +145,7 @@ Rule: nothing is marked passed by deduction. Fields: state, evidence, date, hard
 | AC-09 | No need to touch the phone screen in normal use | NOT TESTED | – | – | none | needs AC-01..07 |
 | AC-10 | Auto-reconnect after unplug | NOT TESTED | ConnectionPolicy backoff logic unit-tested | 2026-11-14 | none | policy only; no real USB events or session |
 | AC-11 | Works with phone screen off | NOT TESTED | – | – | none | – |
-| AC-12 | Documented install and recovery | PARTIAL | scripts exist; no installation.md / recovery guide; flashing steps unverified | – | none | blocked until the device model is confirmed over adb |
+| AC-12 | Documented install and recovery | PARTIAL | scripts exist; installation guide: docs/installation.md (not followed end to end by anyone but the author); flashing steps unverified | – | none | blocked until the device model is confirmed over adb |
 
 ## Security and safety checks to keep passing
 

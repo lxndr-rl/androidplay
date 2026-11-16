@@ -1,0 +1,124 @@
+# Guía de instalación
+
+[English](installation.md) · **Español**
+
+Cómo instalar AndroidPlay en un teléfono y conectarlo a una radio con CarPlay por cable. Es la guía de uso diario; el plan para
+instalar LineageOS en el teléfono es otra página: [rom-install-plan.md](rom-install-plan.md) (en inglés).
+
+> **Nota de honestidad.** Todo lo de abajo lo hizo el autor con un teléfono (Samsung Galaxy S10+, SM-G975F) y una radio
+> (Zlink5). Los pasos marcados *(probado)* funcionaron ahí. Cualquier otro teléfono u otra radio no está probado.
+
+## 0. Qué necesitas
+
+| | |
+|---|---|
+| **Teléfono** | Un teléfono Android con `adb root` y un controlador USB que actúe como host y como gadget (solo el probado se sabe que funciona). Probado: SM-G975F con LineageOS 23.2 nightly **userdebug**. Una compilación normal (user) no tiene `adb root` y los scripts se niegan a correr. El bootloader desbloqueado y la instalación de LineageOS quedan fuera de esta guía: ver [rom-install-plan.md](rom-install-plan.md). |
+| **Radio** | Una radio con CarPlay *por cable* en un puerto USB-A. Probado: Zlink5 (Allwinner, v5.2.44) en su **segundo** puerto USB. |
+| **Cable** | USB-A (radio) a USB-C (teléfono). Un cable de datos normal basta; no hace falta Power Delivery. |
+| **PC (Linux)** | Android SDK (plataforma y build-tools: `aapt2`, `d8`, `zipalign`, `apksigner`), Android NDK r26+, JDK 17+, `adb`. `ffmpeg` solo sirve para ver capturas de prueba. |
+
+## 1. Descarga el código y corre las pruebas
+
+```bash
+git clone https://github.com/lxndr-rl/androidplay.git && cd androidplay
+scripts/run-tests.sh          # pruebas solo en el PC, sin teléfono; esperado: pass=7 fail=0
+```
+
+## 2. Compila todo para el teléfono
+
+```bash
+scripts/build-phone.sh        # herramientas nativas arm64, archivos dex y las dos APK -> .build/phone/
+```
+
+Si no encuentra el NDK, define `ANDROID_NDK_ROOT` (y `ANDROID_SDK_ROOT` para el SDK).
+
+## 3. Instala en el teléfono
+
+Conecta el teléfono al PC, activa la depuración USB, comprueba `adb devices` y ejecuta:
+
+```bash
+scripts/deploy-phone.sh
+```
+
+Copia las herramientas a `/data/local/tmp`, instala el launcher (`dev.lxndr.launcher`) y el servicio de proyección
+(`dev.lxndr.projection`), y da al launcher permiso de ubicación, estado del teléfono y acceso a notificaciones
+(tarjeta de velocidad, barras de señal, "Ahora suena"). **No** inicia nada que cambie el comportamiento USB.
+
+## 4. Dile al teléfono dónde está "casa"
+
+El teléfono se comporta como un teléfono ADB normal mientras esté conectado a tu Wi‑Fi de casa, y se *arma* para la radio en
+cualquier otro sitio. El nombre de la red queda en un archivo del teléfono y nunca se sube al repositorio:
+
+```bash
+adb shell 'echo -n "NOMBRE_DE_TU_WIFI" > /data/local/tmp/androidplay.home_ssid'
+```
+
+Sin ese archivo el teléfono nunca se arma solo. Para forzar un estado: `touch /data/local/tmp/androidplay.car` (siempre
+armado) o `androidplay.home` (siempre ADB).
+
+## 5. Apps (opcional)
+
+El launcher muestra lo instalado: apps de usuario más algunas del sistema. Waze, Google Maps y Spotify no vienen incluidas.
+*(probado)* El autor las instaló con [Aurora Store](https://f-droid.org/packages/com.aurora.store/) (sesión anónima, APK de
+F-Droid con hash y firma verificados). Sin Google Play Services, Maps puede funcionar limitado. Inicia sesión en cada app una
+vez en la pantalla del teléfono antes de ir al auto. Para fijar u ocultar apps usa `config.properties` (`apps.pinned`,
+`apps.hidden`, nombres de paquete separados por comas) en el directorio privado del launcher.
+
+## 6. Inicia el gestor de modo USB
+
+Presentar IDs USB de Apple es un **experimento opcional para tu propia radio** (`LEGAL-001` en [TASKS.md](../TASKS.md)): el
+gestor se niega a arrancar sin la variable explícita de abajo. Nunca forma parte de una imagen de distribución.
+
+```bash
+APPLE_ID_OK=own_radio_only scripts/deploy-phone.sh --start
+adb shell /data/local/tmp/androidplayd.sh status        # state=adb ...
+```
+
+Tras cada reinicio del teléfono el gestor **no** está corriendo y el teléfono es un teléfono ADB normal (el estado seguro).
+Ejecuta de nuevo el mismo comando. Interruptor de emergencia: `adb shell touch /data/local/tmp/androidplay.off`. Para parar y
+restaurar la configuración USB original: `adb shell /data/local/tmp/androidplayd.sh stop`. Al parar se corta el enlace USB:
+si después `adb devices` sale vacío, desconecta y vuelve a conectar el cable una vez.
+
+## 7. Conecta a la radio *(probado en Zlink5)*
+
+1. Desconecta el teléfono del PC. Espera unos 10 segundos: fuera de tu Wi‑Fi de casa se arma solo.
+2. Conéctalo al puerto USB de la radio. En la Zlink5 el que funciona es el **segundo** puerto; si la radio dice
+   "Link fail, try another USB port", usa el otro.
+3. Esperado: "Connecting", luego el splash de AndroidPlay, luego el launcher, con táctil y sonido. La pantalla del teléfono
+   se apaga mientras transmite.
+4. Desconecta y conecta otra vez: se reconecta.
+5. De vuelta al PC: conéctalo; `adb` vuelve sin reiniciar. Si no vuelve, reconecta el cable una vez.
+
+Gestos en la pantalla proyectada *(implementados, aún no probados en la radio)*: deslizar desde el borde izquierdo o derecho hacia dentro = Atrás, deslizar hacia arriba
+desde el borde inferior = Inicio, deslizamiento largo hacia arriba = Recientes. La cápsula Atrás / Inicio también está en
+pantalla.
+
+## Desinstalar / revertir
+
+```bash
+adb shell /data/local/tmp/androidplayd.sh stop
+adb uninstall dev.lxndr.launcher; adb uninstall dev.lxndr.projection
+adb shell 'rm -f /data/local/tmp/androidplay* /data/local/tmp/{gadget_manager,ffs_probe,mdns_probe,carplay_phone,usb_host_iap2,projector.dex,inject.dex,swap_to_host_hook.sh}'
+```
+
+Nada de esto toca `/system`, `/vendor` ni las particiones de arranque; reiniciar devuelve el teléfono al USB original.
+
+## Solución de problemas
+
+| Síntoma | Qué probar |
+|---|---|
+| `adb devices` sale vacío tras `stop` o `start` | Desconecta y vuelve a conectar el cable una vez (el puerto del PC puede bloquearse tras mostrar IDs de Apple). Reiniciar (Vol. abajo + Power ~10 s) siempre funciona. |
+| `refused: set APPLE_ID_OK=own_radio_only` | Es lo esperado; lee la sección 6 y define la variable. |
+| La radio muestra "Link fail" | Puerto USB equivocado. Prueba el otro. |
+| La radio se queda en "Connecting" | El teléfono no estaba armado al conectar. Comprueba que `status` diga `CARPLAY` (armado), que estés fuera del Wi‑Fi de casa (o que exista `androidplay.car`), y espera 10 s tras desconectar del PC. |
+| El clima dice "Sin conexión" | No hay internet o ubicación todavía. Se llena cuando haya GPS y datos. |
+| La velocidad muestra "--" | Aún no hay fix de GPS (cielo abierto). |
+| Logs para reportar un error | `adb pull /data/local/tmp/androidplayd.log`, `androidplayd.ctrl.log`, `swap.log`, `airplay.log`, `iap.log`, `projector.log` |
+
+Más: [troubleshooting.md](troubleshooting.md), [mode-manager.md](mode-manager.md), [hardware-evidence.md](hardware-evidence.md) (en inglés).
+
+## Límites conocidos
+
+- Probado con un teléfono y una radio. Una radio tipo Chevrolet MyLink llegó al primer saludo USB pero nunca a una sesión.
+- Sin arranque automático al encender sin herramientas root; el gestor se inicia a mano tras reiniciar.
+- Waze / Maps / Spotify dentro de la pantalla proyectada no están probados.

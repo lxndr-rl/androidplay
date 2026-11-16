@@ -1,48 +1,71 @@
 # AndroidPlay
 
-Turn an Android phone into a wired-CarPlay **source** for your car radio: the radio thinks it is talking to an iPhone, and
-shows an Android UI instead (launcher, Waze, Spotify, video, maps), with touch, audio and a dark car-friendly home screen.
-The phone's own screen stays off while it streams.
+**English** · [Español](README.es.md)
 
-Developed on a Samsung Galaxy S10+ (SM-G975F, LineageOS 23.2) against a Zlink5 head unit. The design is not tied to
-that phone: the device-specific parts are isolated (USB role switch, panel control) so other models can be added.
+Your Android phone as a wired-CarPlay **source**: plug it into a radio that supports CarPlay over USB and the radio shows an
+Android home screen (Waze, Spotify, video, maps) with touch and sound, while the phone's own screen stays off.
+
+```
+ phone (Android)                                   car radio (CarPlay by cable)
+ ┌──────────────────────────┐   USB-A ⇄ USB-C    ┌──────────────────────────┐
+ │ virtual display 1280×720 │ ── H.264 video ──▶ │  CarPlay screen          │
+ │ launcher + your apps     │ ── audio ────────▶ │  speakers                │
+ │ touch injector           │ ◀── touch ──────── │  touchscreen             │
+ └──────────────────────────┘   iAP2 + AirPlay   └──────────────────────────┘
+```
+
+Built and tested on a Samsung Galaxy S10+ (SM-G975F, LineageOS 23.2) with a Zlink5 head unit. The device-specific parts
+(USB role switch, panel control) are isolated so other models can be added.
+
+## Highlights
+
+- **Radio-side verified:** iAP2 identification and authentication, AirPlay session over USB-NCM, H.264 video, audio and touch.
+- **Armed mode:** away from your home Wi-Fi the phone is ready *before* you plug in; at home it is a normal ADB phone.
+  Plugging into a PC falls back to ADB without a reboot. Reconnects after unplug and replug.
+- **Car home screen:** weather, speed (phone GPS), now playing, signal / Wi-Fi / battery and an app row, with placeholders
+  when there is no data. Edge-swipe gestures: back, home, recents.
+- **Screen off while streaming**, back on when you disconnect.
+
+## Quick start
+
+```bash
+git clone https://github.com/lxndr-rl/androidplay.git && cd androidplay
+scripts/build-phone.sh                                   # build (SDK + NDK needed)
+scripts/deploy-phone.sh                                  # install on the phone (adb root)
+APPLE_ID_OK=own_radio_only scripts/deploy-phone.sh --start   # start the USB mode manager
+```
+
+Then unplug from the PC, wait ~10 s and plug into the radio. Full steps, requirements, revert and troubleshooting:
+**[docs/installation.md](docs/installation.md)** ([Español](docs/installation.es.md)).
 
 ## Status (2026-11-15)
 
-Verified on real hardware (details and logs-derived evidence in [docs/hardware-evidence.md](docs/hardware-evidence.md)):
+| | |
+|---|---|
+| Verified on real hardware | Zlink5 (Allwinner, v5.2.44), second USB port: session, video, audio, touch, reconnect, armed mode, PC fallback. Evidence: [docs/hardware-evidence.md](docs/hardware-evidence.md) |
+| Not verified | any other radio (a Chevrolet MyLink-type unit never reached a session); Waze / Maps / Spotify inside the projected display; the edge gestures on the radio; media buttons (the Zlink exposes only a touch HID) |
+| Limits | no boot-time autostart (start the manager after each phone reboot); needs `adb root` (userdebug build) |
 
-- Zlink5 radio (Allwinner, v5.2.44), second USB port: phone becomes USB host, iAP2 identification and authentication,
-  AirPlay session over the USB-NCM link, H.264 video, audio, touch. Reconnects after unplug/replug.
-- "Armed" mode: when away from the home Wi-Fi the phone presents itself as the head unit expects *before* it is plugged in;
-  plugging it into a PC falls back to normal ADB without a reboot.
-- Launcher with weather, speed (phone GPS), now playing, signal/Wi-Fi/battery and an app row; edge-swipe gestures
-  (back / home / recents).
-
-Not verified, do not assume:
-
-- Any radio other than that Zlink5 (a Chevrolet MyLink-type unit was probed, never reached a session).
-- Waze / Google Maps / Spotify inside the projected display (installed, not tested there).
-- Gestures on the real radio; media-button mapping (the Zlink exposes only a touch HID).
-- No boot-time autostart: the mode manager is started manually after a phone reboot.
-
-## Layout
+## Repository
 
 | Path | What |
 |---|---|
-| `usb/GadgetManager` | ConfigFS / FunctionFS gadget composer and the control-request probe (`ffs_probe`) |
-| `services/CarPlayService` | iAP2, AirPlay client/sender, usbmux, session runner (C++ with host tests) |
+| `usb/GadgetManager` | ConfigFS / FunctionFS gadget composer, control-request probe |
+| `services/CarPlayService` | iAP2, AirPlay client, usbmux, session runner (C++, host tests) |
 | `services/Projector`, `services/ProjectionService` | virtual display, H.264 encoder, panel policy, audio tap |
-| `services/InputBridge` | touch injector, gesture filter |
-| `packages/CarLauncher` | home screen, splash, Back/Home capsule |
-| `scripts/device/androidplayd.sh` | on-phone mode manager (ADB / CarPlay, armed state) |
+| `services/InputBridge` | touch injector and gesture filter |
+| `packages/CarLauncher` | home screen, splash, Back / Home capsule |
+| `scripts/` | `build-phone.sh`, `deploy-phone.sh`, `run-tests.sh`, `device/androidplayd.sh` (on-phone mode manager) |
 | `tests/hardware` | bench and radio test scripts |
 | `docs`, `research` | architecture, mode manager, evidence, protocol notes, legal notes |
 
-Tests that need no hardware: `scripts/run-tests.sh`.
+Tests that need no hardware: `scripts/run-tests.sh`. More: [architecture](docs/architecture.md),
+[mode manager](docs/mode-manager.md), [troubleshooting](docs/troubleshooting.md), [tasks](TASKS.md).
 
 ## Legal and safety
 
 Wired CarPlay requires Apple's MFi authentication; this project **does not** bypass it or ship Apple keys. Presenting Apple
-USB ids is an opt-in experiment for the owner's own radio and is kept out of any release image (see
-[research/licensing.md](research/licensing.md) and `LEGAL-001` in [TASKS.md](TASKS.md)). "CarPlay" and "iPhone" are
-Apple trademarks; this project is not affiliated with Apple. Nothing here touches `/system`, `/vendor` or boot partitions.
+USB ids is an opt-in experiment for the owner's own radio, refused unless `APPLE_ID_OK=own_radio_only` is set, and kept out
+of any release image (see [research/licensing.md](research/licensing.md) and `LEGAL-001` in [TASKS.md](TASKS.md)). "CarPlay",
+"iPhone", "Android" and "Google Play" are trademarks of their owners; this project is not affiliated with Apple or Google.
+Nothing here touches `/system`, `/vendor` or boot partitions.

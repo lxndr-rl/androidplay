@@ -19,7 +19,7 @@
 #   * Only ids/strings change between states (no function add/remove, no HAL toggle).
 #   * A guard rebinds the UDC if it stays empty. Kill switch: touch /data/local/tmp/androidplay.off
 # env: FFS_MODE=clone|noeps (ffs_probe mode; default: ff/00/00 with two bulk endpoints)
-# usage: [NOSWITCH=1] [SOLE=1] [SWEEP=1] androidplayd.sh [start|stop|status]     (NOSWITCH=1: only log what it would do)
+# usage: APPLE_ID_OK=own_radio_only [NOSWITCH=1] [SOLE=1] [SWEEP=1] androidplayd.sh [start|stop|status]     (NOSWITCH=1: only log what it would do)
 D=/data/local/tmp; G=/config/usb_gadget/g1; T=/sys/kernel/tracing
 OFF=$D/androidplay.off; LOG=$D/androidplayd.log; PIDF=$D/androidplayd.pid; STATE=$D/androidplayd.state
 CARPLAY_GRACE=${CARPLAY_GRACE:-25}
@@ -94,6 +94,8 @@ start) ;;
 esac
 
 [ -f $PIDF ] && kill -0 $(cat $PIDF) 2>/dev/null && { echo "already running"; exit 0; }
+# Presenting Apple USB ids is an opt-in experiment for the owner's own radio (LEGAL-001): refuse to start without it.
+[ "$NOSWITCH" = 1 ] || [ "$APPLE_ID_OK" = own_radio_only ] || { echo "refused: set APPLE_ID_OK=own_radio_only (see docs/installation.md)"; exit 1; }
 [ -f $OFF ] && { echo "kill switch present ($OFF)"; exit 1; }
 rm -f $D/androidplayd.stop
 echo $$ > $PIDF
