@@ -105,7 +105,9 @@ public final class LauncherActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        d = getResources().getDisplayMetrics().density;
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        // designed for 720 dp of height (the projected display); smaller screens (the phone itself) shrink everything to fit
+        d = dm.density * Math.min(1f, (dm.heightPixels / dm.density) / 720f);
         ConnectionService.start(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -179,11 +181,19 @@ public final class LauncherActivity extends Activity {
 
     private TextView tv(String t, float sp, int color, String family) {
         TextView v = new TextView(this);
-        v.setText(t); v.setTextSize(sp); v.setTextColor(color);
+        v.setText(t); v.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (sp) * d); v.setTextColor(color);
         v.setTypeface(Typeface.create(family, Typeface.NORMAL));
         v.setSingleLine(true);
         v.setEllipsize(android.text.TextUtils.TruncateAt.END);
         return v;
+    }
+
+    /** Long text scrolls instead of being cut with an ellipsis. */
+    private static void marquee(TextView v) {
+        v.setEllipsize(android.text.TextUtils.TruncateAt.MARQUEE);
+        v.setMarqueeRepeatLimit(-1);
+        v.setHorizontalFadingEdgeEnabled(true);
+        v.setSelected(true);
     }
 
     private View grow() { return new View(this); }
@@ -204,17 +214,17 @@ public final class LauncherActivity extends Activity {
         s.setPadding(dp(20), dp(26), dp(14), dp(18));
         TextClock clock = new TextClock(this);
         clock.setFormat24Hour("HH:mm"); clock.setFormat12Hour("HH:mm");   // always 24 h
-        clock.setTextSize(44); clock.setTextColor(TEXT);
+        clock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (44) * d); clock.setTextColor(TEXT);
         clock.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
         s.addView(clock);
         TextClock day = new TextClock(this);
         day.setFormat24Hour("EEEE"); day.setFormat12Hour("EEEE");
-        day.setTextSize(18); day.setTextColor(TEXT);
+        day.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (18) * d); day.setTextColor(TEXT);
         day.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         s.addView(day);
         TextClock date = new TextClock(this);
         date.setFormat24Hour("d 'de' MMMM"); date.setFormat12Hour("d 'de' MMMM");
-        date.setTextSize(15); date.setTextColor(MUTED);
+        date.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (15) * d); date.setTextColor(MUTED);
         s.addView(date);
         s.addView(grow(), new LinearLayout.LayoutParams(1, 0, 1f));   // the Back/Home capsule floats here
         railSignal = tv("", 15, TEXT, "sans-serif-medium");
@@ -320,6 +330,7 @@ public final class LauncherActivity extends Activity {
         c.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         wxText = tv("", 20, TEXT, "sans-serif-medium");
         wxSub = tv("", 14, MUTED, "sans-serif");
+        marquee(wxText); marquee(wxSub);
         c.addView(wxText); c.addView(wxSub);
         return c;
     }
@@ -424,6 +435,7 @@ public final class LauncherActivity extends Activity {
         c.addView(tv("AHORA SUENA", 13, MUTED, "sans-serif-medium"));
         npTitle = tv("", 24, TEXT, "sans-serif-medium");
         npArtist = tv("", 17, MUTED, "sans-serif");
+        marquee(npTitle); marquee(npArtist);
         LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         LinearLayout text = new LinearLayout(this);
         text.setOrientation(LinearLayout.VERTICAL);
@@ -448,7 +460,7 @@ public final class LauncherActivity extends Activity {
 
     private TextView ctlButton(String glyph, final Runnable action) {
         TextView t = new TextView(this);
-        t.setText(glyph); t.setTextSize(30); t.setTextColor(TEXT); t.setGravity(Gravity.CENTER);
+        t.setText(glyph); t.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (30) * d); t.setTextColor(TEXT); t.setGravity(Gravity.CENTER);
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL); g.setColor(TILE_PRESSED);
         t.setBackground(g);
@@ -582,7 +594,7 @@ public final class LauncherActivity extends Activity {
         TextView label = new TextView(this);
         label.setText(e.label);
         label.setTextColor(TEXT);
-        label.setTextSize(19);
+        label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (19) * d);
         label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         label.setGravity(Gravity.CENTER);
         label.setSingleLine(true);
