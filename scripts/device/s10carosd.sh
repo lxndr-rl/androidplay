@@ -5,6 +5,14 @@
 #   CARPLAY     : Apple ids. Entered only when a head unit probes the phone (Android Open Accessory probe `c0 33`,
 #                 or an Apple probe `c0 53` if ids were already Apple). The session itself is swap_to_host_hook.sh.
 #
+# v2 ("armed"): the radio must see Apple ids the instant it is plugged in (Zlink ignores a new device while it is busy with
+# its own Android Auto attempt, so reacting to its probe is too late). Therefore the idle state depends on where the phone is:
+#   connected to the home Wi-Fi (SSID in /data/local/tmp/s10caros.home_ssid)  -> ADB   (a PC never sees Apple ids)
+#   anywhere else (or SSID file missing => ADB, the safe default is NOT armed)  -> CARPLAY armed (Apple ids, waiting for a radio)
+# Overrides: touch /data/local/tmp/s10caros.home (force ADB) or s10caros.car (force armed). While armed, a host that turns out to
+# be a PC (it closes the configuration right after opening it) or that sends no Apple request for CARPLAY_GRACE s makes the
+# phone drop to ADB until the cable is pulled. The idle state is only changed while no cable is attached.
+#
 # Rules that keep adb reachable:
 #   * ADB is the state at start and the state after every session or timeout.
 #   * CARPLAY never lasts more than CARPLAY_GRACE seconds without a radio request and never outlives a session.
@@ -22,6 +30,13 @@ SWEEP=${SWEEP:-1}              # every other c0 53 answered with a different val
 UDC=$(ls /sys/class/udc | head -1)
 t() { cut -d' ' -f1 /proc/uptime; }
 log() { echo "$(t) $*" >> $LOG; }
+want_state() {
+  [ -f $D/s10caros.home ] && { echo adb; return; }
+  [ -f $D/s10caros.car ] && { echo carplay; return; }
+  h=$(cat $D/s10caros.home_ssid 2>/dev/null)
+  [ -z "$h" ] && { echo adb; return; }                                   # not configured: stay a normal phone
+  if cmd wifi status 2>/dev/null | grep -q "connected to \"$h\""; then echo adb; else echo carplay; fi
+}
 setids() {   # vid pid manufacturer product serial (UDC cycle only)
   echo "" > $G/UDC; sleep 1
   # SOLE=1 (experiment): hide the adb interface from the radio while in CARPLAY; put it back when returning to ADB.
@@ -50,7 +65,7 @@ ensure_composed() {   # $1 = force: also strip links Android added (accessory fu
   log "recomposed (cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"
 }
 to_adb()     { setids 0x04e8 0x685d samsung SM-G975F "$SER_ORIG"; echo adb > $STATE; log "state ADB"; }
-to_carplay() { setids 0x05ac 0x12a8 "Apple Inc." iPhone "$SER_APPLE"; echo carplay > $STATE; CP_SINCE=$(cut -d. -f1 /proc/uptime); log "state CARPLAY ($1)"; }
+to_carplay() { setids 0x05ac 0x12a8 "Apple Inc." iPhone "$SER_APPLE"; echo carplay > $STATE; CP_SINCE=$(cut -d. -f1 /proc/uptime); CP_ENTER=$CP_SINCE; rm -f $D/s10.cfg0; log "state CARPLAY ($1)"; }
 
 kill_tracers() { for p in $(ps -A -o PID,ARGS | grep "[c]at /sys/kernel/tracing/trace_pipe" | awk '{print $1}'); do kill $p 2>/dev/null; done; }
 
@@ -107,6 +122,7 @@ rm -f $D/s10.aoa $D/s10.apple; : > $D/s10carosd.ctrl.log; CN=0
     cat $T/trace_pipe | while read -r line; do
     case "$line" in
       *"c0 33 00 00 00 00 02 00"*) touch $D/s10.aoa; echo "$(cut -d' ' -f1 /proc/uptime) saw AOA probe c0 33" >> $LOG;;
+      *"Set Configuration(Config = 0)"*) touch $D/s10.cfg0;;
       *"c0 53 00 00 00 00 04 00"*) touch $D/s10.apple; echo "$(cut -d' ' -f1 /proc/uptime) saw Apple probe c0 53" >> $LOG;;
     esac
     # any non-standard request (printed as raw bytes, not as a name): keep a short record of what each host asks us
@@ -122,12 +138,13 @@ TRACER=$!
 # guard: gadget unbound for 2 reads 2 s apart (and not in a deliberate switch) -> bind it again
 ( while :; do sleep 2; [ -f $D/s10carosd.stop ] && exit 0
     a=$(cat $G/UDC 2>/dev/null)
-    if [ -z "$a" ] && [ ! -f $D/s10.switching ]; then sleep 2; b=$(cat $G/UDC 2>/dev/null); [ -z "$b" ] && { echo $UDC > $G/UDC 2>/dev/null; log "guard rebound the UDC"; }; fi
+    # only when a cable partner is present: with no cable Android leaves the UDC unbound on purpose
+    if [ -z "$a" ] && [ ! -f $D/s10.switching ] && [ -e /sys/class/typec/port0-partner ]; then sleep 2; b=$(cat $G/UDC 2>/dev/null); [ -z "$b" ] && { echo $UDC > $G/UDC 2>/dev/null; log "guard rebound the UDC"; }; fi
   done ) &
 GUARD=$!
 
 trap 'stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0' TERM INT
-SERVED=0; NA=0; TICK=0; MISS=0; CFG=0; LAST_GENERIC=-9999
+SERVED=0; NA=0; TICK=0; MISS=0; CFG=0; LAST_GENERIC=-9999; ARMED=0; NAI=0; CP_ENTER=0; CP_SINCE=$(cut -d. -f1 /proc/uptime); WANT_AT=0; TEMP_ADB=0
 while :; do
   sleep 1
   [ -f $OFF ] && { log "kill switch: stopping"; stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0; }
@@ -135,7 +152,17 @@ while :; do
   S=$(cat $STATE)
   TICK=$((TICK+1))
   if [ $((TICK % 30)) = 0 ]; then log "alive: state=$S udc=$(cat $G/UDC) udc_state=$(cat /sys/class/udc/$UDC/state 2>/dev/null) ids=$(cat $G/idVendor):$(cat $G/idProduct) link=$([ -e $G/configs/b.1/s10_carplay ] && echo yes || echo NO) trace_on=$(cat $T/tracing_on)"; fi
+  UST=$(cat /sys/class/udc/$UDC/state 2>/dev/null)
   if [ "$S" = adb ]; then
+    # idle state: with no cable attached for 3 s, follow the location rule (armed away from home)
+    if [ "$UST" = "not attached" ] && [ ! -f $D/s10.switching ]; then NAI=$((NAI+1)); else NAI=0; fi
+    if [ $NAI -ge 3 ] && [ $((TICK % 5)) = 0 ] && [ "$NOSWITCH" != 1 ]; then
+      if [ "$(want_state)" = carplay ]; then
+        log "idle, no cable, away from home: arming CARPLAY"
+        touch $D/s10.switching; ensure_composed; to_carplay "armed (away from home)"; ARMED=1; TEMP_ADB=0; rm -f $D/s10.switching; NAI=0; continue
+      fi
+      TEMP_ADB=0
+    fi
     # Android entered accessory mode (ids 18d1:xxxx) because a head unit asked for it: that is an AOA probe even if the
     # trace missed it. Note it once per episode.
     if [ "$(cat $G/idVendor)" = 0x18d1 ] && [ ! -f $D/s10.switching ]; then
@@ -170,21 +197,35 @@ while :; do
   else   # carplay
     if [ -d $D/swap.lock ]; then SERVED=1; continue; fi          # a session is running
     if [ $SERVED = 1 ]; then                                      # it just ended (cleanup removed the lock)
-      SERVED=0; rm -f $D/s10.aoa $D/s10.apple
+      SERVED=0; rm -f $D/s10.aoa $D/s10.apple $D/s10.cfg0
+      if [ $ARMED = 1 ]; then log "session ended; staying armed"; CP_SINCE=$(cut -d. -f1 /proc/uptime); continue; fi
       touch $D/s10.switching; to_adb; rm -f $D/s10.switching; continue
     fi
-    # cable pulled while waiting for a radio: back to ADB at once, before a PC can be plugged in and see Apple ids
-    # (not during the first 6 s: the radio re-enumerates after our id switch and the UDC is briefly not attached then)
-    if [ "$(cat /sys/class/udc/$UDC/state 2>/dev/null)" = "not attached" ] && [ $(( $(cut -d. -f1 /proc/uptime) - CP_SINCE )) -ge 6 ]; then NA=$((NA+1)); else NA=0; fi
-    if [ $NA -ge 2 ]; then
-      log "cable gone while in CARPLAY: back to ADB"
-      NA=0; touch $D/s10.switching; to_adb; rm -f $D/s10.switching; continue
-    fi
     NOW=$(cut -d. -f1 /proc/uptime)
-    if [ -f $D/s10.apple ]; then rm -f $D/s10.apple; CP_SINCE=$NOW; fi   # radio is talking Apple: keep waiting
-    if [ $((NOW - CP_SINCE)) -ge $CARPLAY_GRACE ]; then
-      log "no radio request for ${CARPLAY_GRACE}s: back to ADB"
-      touch $D/s10.switching; to_adb; rm -f $D/s10.switching
+    if [ "$UST" = "not attached" ]; then
+      CP_SINCE=$NOW                                               # no host: nothing to wait for
+      if [ $((NOW - CP_ENTER)) -ge 6 ]; then NA=$((NA+1)); else NA=0; fi
+      rm -f $D/s10.cfg0
+      if [ $NA -ge 2 ]; then
+        if [ $ARMED = 1 ]; then
+          [ "$(want_state)" = adb ] && { log "armed but now at home: back to ADB"; NA=0; touch $D/s10.switching; to_adb; ARMED=0; rm -f $D/s10.switching; }
+        else
+          log "cable gone while in temporary CARPLAY: back to ADB"; NA=0; touch $D/s10.switching; to_adb; rm -f $D/s10.switching
+        fi
+        continue
+      fi
+    else
+      NA=0
+      if [ -f $D/s10.apple ]; then rm -f $D/s10.apple $D/s10.cfg0; CP_SINCE=$NOW; fi   # a radio is talking Apple: keep waiting
+      # a PC closes the configuration it just opened (SET_CONFIGURATION 0): never leave it looking at Apple ids
+      if [ -f $D/s10.cfg0 ] && [ $((NOW - CP_ENTER)) -ge 2 ]; then
+        log "PC pattern (SET_CONFIGURATION 0) while armed: back to ADB until the cable is pulled"
+        rm -f $D/s10.cfg0; TEMP_ADB=1; ARMED=0; touch $D/s10.switching; to_adb; rm -f $D/s10.switching; continue
+      fi
+      if [ $((NOW - CP_SINCE)) -ge $CARPLAY_GRACE ]; then
+        log "host attached ${CARPLAY_GRACE}s without an Apple request: back to ADB until the cable is pulled"
+        TEMP_ADB=1; ARMED=0; touch $D/s10.switching; to_adb; rm -f $D/s10.switching
+      fi
     fi
   fi
 done
