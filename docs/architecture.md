@@ -1,4 +1,4 @@
-# S10CarOS architecture (state of 2026-11-14)
+# Duende architecture (state of 2026-11-14)
 
 Legend: **[T-emu]** exercised on the Android emulator or host, **[T-host]** host unit/loopback tests only, **[none]** written but never run, **[gap]** not written.
 

@@ -123,7 +123,7 @@ The recovered tree contains no MFi or iAP2 authentication code, because that liv
 |---|---|---|
 | OkcarOS API Server (PHP) | https://github.com/ZTXBOSS666/OKCarOS_API_Server | Created 2026-09-01, 2 commits, 44 KB. Its README says it is a **reverse-engineered clone** of the official verification backend (device registration, activation codes, RSA+JWT), unaffiliated, "no commercial use". Licence is CC BY-NC 4.0 (API shows NOASSERTION). It ships `cert/*.pem` and `server.key` files. The same author also published `dopacrack` (MIT, 2026-03-17), and an AGPL `new-api-ztx`. **Do not use or run.** It exists only as evidence that activation is server-side |
 | OkCarLink (KernelSU/Magisk module) | https://github.com/Enthlinn/okcarlink | See `alternatives.md`. Internal names keep the `okcar-*` prefix, so it appears to be derived from OkcarOS's internal kit; its docs say it is "the public release of an internal kit" [V]. Provenance relation to the OkcarOS vendor is [U] |
-| CarDroid (Android launcher + wireless sender) | https://github.com/pavunato/CarDroid | Source includes `OkcarMfiSapImpl.kt` and `OkcarBypassProvider.kt` plus `com.okcar.tool.encrypter` classes (search hits only; **not opened**). No licence. Flagged: possible vendor-derived or MFi-related code, out of bounds for S10CarOS |
+| CarDroid (Android launcher + wireless sender) | https://github.com/pavunato/CarDroid | Source includes `OkcarMfiSapImpl.kt` and `OkcarBypassProvider.kt` plus `com.okcar.tool.encrypter` classes (search hits only; **not opened**). No licence. Flagged: possible vendor-derived or MFi-related code, out of bounds for Duende |
 | OpenAA README | https://github.com/manum45/OpenAA | Lists okcaros as "server for Apple Carplay on android, requires to be flashed via recovery" (GPL-3.0 repo, pushed 2026-08-16) [V] |
 | XDA thread | https://xdaforums.com/t/has-anyone-used-the-android-custom-rom-okcaros-connected-with-carplay.4641525/ | HTTP 403 to WebFetch. Search snippet says a 2025 user reported it did not work on their CarPlay, Android Auto and dual-protocol cars, and another replied they used it until recently [S/U] |
 
@@ -136,7 +136,7 @@ The recovered tree contains no MFi or iAP2 authentication code, because that liv
 - Whether the closed engine is a wired-only or also a wireless implementation: issue #17 asks for wireless CarPlay, so wired-only is likely [W].
 - Whether the `okcar-os` org was deleted voluntarily, taken down by DMCA, or renamed: unknown [U].
 
-## 7. Reuse assessment for S10CarOS
+## 7. Reuse assessment for Duende
 
 1. Reusable (clean): the Apple-gadget configuration layout (configs, function names, HID report, role-switch sequence) as a *specification* for Agent C. The code is GPL-2.0 and the base is Google GPL-2.0 `f_accessory.c`, so any derived kernel code must stay GPL-2.0.
 2. Reusable as reference: `main.mk` property scheme and the `product.mk`/overlay pattern, sepolicy domain `okcarte`, and the privapp-permission list for the engine app. The `okcar` repo has **no licence file**, so the default is all rights reserved; use as read-only inspiration, and write our own.

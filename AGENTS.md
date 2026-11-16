@@ -1,6 +1,6 @@
-# AGENTS.md — S10CarOS multi-agent contract
+# AGENTS.md — Duende multi-agent contract
 
-Orchestrator: **S10CarOS Orchestrator** (main agent). Integrates, reviews, resolves discrepancies by evidence (never by consensus).
+Orchestrator: **Duende Orchestrator** (main agent). Integrates, reviews, resolves discrepancies by evidence (never by consensus).
 
 Rules for all agents: no invented compat, no claimed untested results, cite URL + date + license for every finding, no flashing/bootloader actions, no MFi bypass/extracted keys. Work only in your own directories; hand off via versioned files.
 

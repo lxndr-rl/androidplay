@@ -1,4 +1,4 @@
-S10CarOS — STATUS
+Duende — STATUS
 
 Fecha: 2026-11-14
 Versión objetivo: LineageOS 23.2 (Android 16), rama oficial verificada para beyond2lte

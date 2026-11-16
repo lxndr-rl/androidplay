@@ -1,4 +1,4 @@
-# Hardware evidence (S10+ SM-G975F, serial R58M74PSHAY)
+# Hardware evidence (S10+ SM-G975F, serial <serial>)
 
 Raw outputs: `diagnostics-*/` (gitignored). Date 2026-11-14. Everything here was read, not changed.
 Level: V = observed on this phone. Nothing here shows CarPlay works.
@@ -246,3 +246,9 @@ User report from the radio run of observation 13: touch "works very well, almost
 - [V on the bench] Forced armed (`s10caros.car`), cable pulled (state CARPLAY armed after 3 s), cable plugged into the PC: `PC pattern (SET_CONFIGURATION 0) while armed: back to ADB until the cable is pulled`; the PC listed the phone (adb) without replugging and without a reboot. An armed phone reaching a PC therefore recovers by itself.
 - The guard that rebinds the UDC fired every ~4 s while armed with no cable (Android leaves the UDC unbound when nothing is plugged in); it now acts only when /sys/class/typec/port0-partner exists.
 - NOT yet verified with a radio: armed mode on Zlink (expected: `c0 53` within ~1 s of plugging) and on the Chevrolet.
+
+## Observation 23: armed mode on Zlink works, reconnect works (2026-11-15, user report)
+- [V by the user, on the real Zlink5 radio, port B] Armed mode: plugging the phone into the radio brings up the CarPlay session (user: "Funciona"); unplugging and plugging again reconnects ("La reconexión funciona"). Not measured: seconds per attempt, number of attempts (no log read yet for these runs).
+- [V] Before that trip: manager log showed no radio contact during an armed window in which nothing had been plugged into a radio; the `trace_pipe` reader restarts ~every 10 s (EOF, something toggles tracing) and now waits 0.2 s instead of 1 s before restarting, so fewer requests are lost.
+- Back / Home from the radio buttons: Zlink only declared a touch-screen HID in /info (both UUIDs in airplay.log are touch reports); no button device seen. Whether Zlink forwards its physical buttons is UNKNOWN; other radios may differ. User chose gestures on the projected screen instead (radio independent).
+- Gestures implemented in InputBridge (`GestureFilter`, 13 host tests): swipe in from left/right edge = BACK, swipe up from bottom edge = HOME, long swipe up (>40 % height) = RECENTS. Edge touches are held until classified (taps and drags at the edge are replayed). NOT yet tried on the phone: needs `inject.dex` pushed and a trip; whether KEYCODE_HOME / APP_SWITCH injected for the trusted virtual display act on that display is a HYPOTHESIS (BACK works that way today via the Back button).

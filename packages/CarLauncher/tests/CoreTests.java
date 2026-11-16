@@ -69,6 +69,12 @@ public class CoreTests {
         List<String> pk = new ArrayList<>(); for (AppFilter.Entry e : out) pk.add(e.pkg);
         check(pk.equals(Arrays.asList("org.zed", "org.maps", "org.music")), "pinned first, rest sorted, hidden/self/dup removed: " + pk);
 
+        // ---- CardText ----
+        check(CardText.weatherText(0).equals("Despejado") && CardText.weatherText(63).equals("Lluvia") && CardText.weatherText(96).equals("Tormenta") && CardText.weatherText(999).equals("Sin datos"), "weather text");
+        check(CardText.weatherIcon(3).startsWith("\u2601") && !CardText.weatherIcon(95).isEmpty(), "weather icon");
+        check(CardText.kmh(0f) == 0 && CardText.kmh(0.4f) == 0 && CardText.kmh(10f) == 36 && CardText.kmh(-1f) == 0 && CardText.kmh(Float.NaN) == 0, "speed km/h with standstill noise");
+        check(CardText.age(10_000).equals("ahora") && CardText.age(5 * 60_000).equals("hace 5 min") && CardText.age(130 * 60_000).equals("hace 2 h"), "age");
+        check(CardText.temp(23.6).equals("24\u00B0") && CardText.temp(-0.4).equals("0\u00B0"), "temp rounding");
         if (fails > 0) { System.out.println(fails + " FAILED"); System.exit(1); }
         System.out.println("ALL PASSED");
     }

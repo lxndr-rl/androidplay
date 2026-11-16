@@ -26,7 +26,7 @@ Only facts with evidence. "Unknown" is the honest default.
 | Jaguar F-PACE InControl Touch Pro (Harman, AirPlay srcvers 280.33.12.1) | the *protocol document* we rely on was measured on it, by a third party, with a board (not an Android phone) |
 | Any other radio | **UNKNOWN**. Newer radios may require things the document marks as unobserved (encryption/pairing, 466 answers); the sender does not implement paired (ChaCha20) mode. |
 
-## Android versions tested for the S10CarOS components
+## Android versions tested for the Duende components
 
 | Component | Tested on |
 |---|---|

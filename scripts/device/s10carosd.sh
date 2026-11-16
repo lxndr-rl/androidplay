@@ -131,7 +131,7 @@ rm -f $D/s10.aoa $D/s10.apple; : > $D/s10carosd.ctrl.log; CN=0
     esac
   done
     echo "$(cut -d' ' -f1 /proc/uptime) trace reader ended (EOF); restarting" >> $LOG
-    sleep 1
+    sleep 0.2
   done ) &
 TRACER=$!
 

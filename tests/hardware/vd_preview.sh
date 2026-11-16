@@ -2,8 +2,8 @@
 # Bring-up helper (phone on adb, rooted): run the projection pipeline locally and record what the radio would get.
 # usage: vd_preview.sh OUT_H264 SECONDS [TAP "x y" ...]   e.g. vd_preview.sh /tmp/a.h264 20 "320 300"
 set -u
-S=${S10_SERIAL:-R58M74PSHAY}; OUT=$1; SECS=$2; shift 2
-ADB="adb -s $S"
+S=${S10_SERIAL:-}; OUT=$1; SECS=$2; shift 2
+ADB="adb ${S:+-s $S}"
 $ADB shell 'svc power stayon true; input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard; am force-stop com.s10caros.projection; am force-stop com.s10caros.launcher; for p in $(ps -A | grep app_process | awk "{print \$2}"); do kill $p; done; rm -f /data/local/tmp/touch.fifo; mkfifo /data/local/tmp/touch.fifo; chmod 666 /data/local/tmp/touch.fifo; logcat -c'
 $ADB reverse tcp:47500 tcp:47500 >/dev/null
 SINK=$(mktemp -d)/sink.py

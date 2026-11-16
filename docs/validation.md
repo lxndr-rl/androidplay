@@ -1,4 +1,4 @@
-# S10CarOS validation
+# Duende validation
 
 Date of this record: 2026-11-14. Only what was actually run is marked. No phone and no CarPlay radio have been available, so every criterion that needs hardware is **NOT TESTED**.
 

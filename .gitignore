@@ -1,2 +1,15 @@
+# build output
 .build/
+build/
+*.apk
+*.dex
+*.keystore
+*.jks
+# raw hardware logs and captures (kept outside the repo; the conclusions live in docs/hardware-evidence.md)
 diagnostics-*/
+*.log
+*.pcap
+*.bin
+# local state
+*.swp
+.DS_Store

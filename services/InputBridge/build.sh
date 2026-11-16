@@ -10,8 +10,8 @@ mkdir -p "$OUT"
 case "${1:-}" in
 test)
   rm -rf "$OUT/core" && mkdir -p "$OUT/core"
-  javac -Xlint:all -d "$OUT/core" $(find "$HERE/src/com/s10caros/input/core" -name '*.java') "$HERE/tests/MapperTests.java"
-  java -cp "$OUT/core" MapperTests
+  javac -Xlint:all -d "$OUT/core" $(find "$HERE/src/com/s10caros/input/core" -name '*.java') "$HERE/tests/MapperTests.java" "$HERE/tests/GestureTests.java"
+  java -cp "$OUT/core" MapperTests && java -cp "$OUT/core" GestureTests
   ;;
 dex)
   BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"

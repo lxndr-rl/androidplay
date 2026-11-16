@@ -1,7 +1,7 @@
 # Alternatives and equivalents to OkcarOS
 
 Agent G, 2026-11-14. All metadata from `gh api repos/<owner>/<repo>` today unless marked. Tags: [V] verified, [S] secondary, [U] unverified.
-Roles: SENDER = acts as the iPhone/phone toward a CarPlay head unit (what S10CarOS needs). RECEIVER = acts as the car/head unit. Transport: USB (wired) or wireless (BT + Wi-Fi).
+Roles: SENDER = acts as the iPhone/phone toward a CarPlay head unit (what Duende needs). RECEIVER = acts as the car/head unit. Transport: USB (wired) or wireless (BT + Wi-Fi).
 Maintenance: "active" = pushed within 60 days of 2026-11-14.
 Nothing here was built, run or tested by us. Compatibility with any car is only what each project claims.
 
@@ -53,7 +53,7 @@ Nothing here was built, run or tested by us. Compatibility with any car is only 
 ### A7. OkcarOS itself
 See `okcaros-recovery.md`. Role SENDER, wired USB (the Apple-device gadget). Source: partial and now unreachable at origin; engine binary-only.
 
-## B. Receiver projects (head-unit or dongle role; test benches and protocol references for us, not S10CarOS code)
+## B. Receiver projects (head-unit or dongle role; test benches and protocol references for us, not Duende code)
 
 | Project | URL | Licence | Last push | Notes |
 |---|---|---|---|---|
@@ -94,7 +94,7 @@ The Carlinkit/Autobox protocol docs (pycarplay, node-CarPlay) describe the **don
 - GitLab, Codeberg, Telegram, Discord: no searchable primary OkcarOS presence found [U].
 - XDA: the OkcarOS thread was reachable only through a search snippet.
 
-## E. Comparison for S10CarOS requirements
+## E. Comparison for Duende requirements
 
 | Need (S10+, wired, LineageOS) | OkcarOS | OkCarLink | carjack | CarDeck | Pi2Carplay | OrangeCar |
 |---|---|---|---|---|---|---|
@@ -120,7 +120,7 @@ Two different wired models exist; they are **not the same thing**:
 | Measured on | one Jaguar/Harman unit (QNX) | a head-unit DiPlay app (claim; OEM units not shown) [U] |
 | Kernel needs | dwc3 role switch (unmeasured on S10+: PC refused DR_Swap) | none beyond FunctionFS: FFS + NCM from userspace, kernel unmodified [V] |
 
-Consequences for S10CarOS (analysis, [U] until the radio is captured):
+Consequences for Duende (analysis, [U] until the radio is captured):
 - Generic Android head units (Allwinner and similar) usually run a vendor CarPlay app on Android that talks to an iPhone through an **Android-hosted usbmux/lockdown stack**; if that holds for the user's radio, Model 2 applies and the role swap is not needed. This is a hypothesis; the radio's CarPlay stack is unidentified.
 - Our measured FFS path (bulk loopback verified on the S10+) is the transport Model 2 needs. Missing: usbmux framing, lockdown (plist over mux, TLS server), `com.apple.carkit.service`, iAP2 on the pipe, NCM.
 - Both models still need the Apple VID/PID (hosts match by it): LEGAL-001 stays open and is the user's call.

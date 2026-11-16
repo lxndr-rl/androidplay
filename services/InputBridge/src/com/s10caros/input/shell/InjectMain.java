@@ -3,6 +3,7 @@ package com.s10caros.input.shell;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.MotionEvent;
+import com.s10caros.input.core.GestureFilter;
 import com.s10caros.input.core.TouchMapper;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -32,6 +33,7 @@ public final class InjectMain {
         final int disp = display;
         if (listen > 0) startListener(inj, listen, disp);
         TouchMapper mapper = new TouchMapper(w, h);
+        GestureFilter gestures = new GestureFilter(w, h);
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
         String line;
         int sent = 0, dropped = 0;
@@ -40,11 +42,14 @@ public final class InjectMain {
             if (p.length == 0 || p[0].isEmpty()) continue;
             if (p[0].equals("S")) { Thread.sleep(Long.parseLong(p[1])); continue; }
             if (p.length < 3) { dropped++; continue; }
-            TouchMapper.Out o = mapper.map(p[0].charAt(0), Integer.parseInt(p[1]), Integer.parseInt(p[2]), SystemClock.uptimeMillis());
-            if (o == null) { dropped++; continue; }
-            boolean ok = inj.inject(o, display);
-            if (ok) sent++; else dropped++;
+            for (GestureFilter.Ev ev : gestures.feed(p[0].charAt(0), Integer.parseInt(p[1]), Integer.parseInt(p[2]))) {
+                if (ev.kind == 'G') { if (inj.key(ev.x, display)) sent++; else dropped++; continue; }
+                TouchMapper.Out o = mapper.map(ev.kind, ev.x, ev.y, SystemClock.uptimeMillis());
+                if (o == null) { dropped++; continue; }
+                if (inj.inject(o, display)) sent++; else dropped++;
+            }
         }
+        gestures.reset();
         TouchMapper.Out r = mapper.release(SystemClock.uptimeMillis());
         if (r != null && inj.inject(r, display)) sent++;
         System.out.println("INJECT sent=" + sent + " dropped=" + dropped + " display=" + display);

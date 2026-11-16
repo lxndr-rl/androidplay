@@ -1,4 +1,4 @@
-# LineageOS for beyond2lte (Galaxy S10+) - research for S10CarOS
+# LineageOS for beyond2lte (Galaxy S10+) - research for Duende
 
 Agent A, research date 2026-11-14. Evidence levels: **V** = fetched/queried live from primary source today;
 **D** = derived from V data by me; **U** = unverified (no device / not built here).
@@ -40,7 +40,7 @@ Source: https://wiki.lineageos.org/devices/beyond2lte/build/ (V, 2026-11-14)
 ### Can this host build it? (host: Ubuntu 24.04.5, 8 cores, 39 GB RAM + 7 GB swap, 189 GB free, JDK17)
 - **Officially NO**: RAM 39 < 64 GB and disk 189 < 400 GB (verify.sh fails on both). Tools missing: flex gperf xsltproc lz4 erofs-utils ccache git-lfs protoc imagemagick schedtool pngcrush repo, multilib; no passwordless sudo, so setup.sh needs a password.
 - Practical (U, my estimate, not measured): synced source + out for one device commonly lands well over 189 GB with ccache; a build is likely to run out of disk. Possible mitigations (untested): lower `S10CAROS_MIN_*`, more swap/zram, external disk, or build on a larger machine/CI. 39 GB RAM may build slowly; OOM risk at link/R8 steps.
-- Alternative needing no source build (D): use the official nightly zip/recovery from download.lineageos.org and add S10CarOS components as apps/overlay or a vendor-image layer later.
+- Alternative needing no source build (D): use the official nightly zip/recovery from download.lineageos.org and add Duende components as apps/overlay or a vendor-image layer later.
 
 ## 5. Artifacts
 scripts/setup.sh (idempotent, `--dry-run`), scripts/verify.sh (exit 1 if unmet), scripts/build.sh (needs `S10CAROS_CONFIRM_BUILD=1`; init|sync|build|all), manifests/local_manifests/s10caros.xml. Outputs of runs on this host: see Agent A final report (verify.sh exit 1: RAM, disk, 12 missing tools, multilib packages; bash -n OK for all; setup.sh --dry-run exit 0; build.sh without env exit 3).
