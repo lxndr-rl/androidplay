@@ -65,9 +65,10 @@ up() { cut -d. -f1 /proc/uptime; }
   log "eth0 policy route installed"
   [ -x /data/local/tmp/mdns_probe ] && /data/local/tmp/mdns_probe eth0 20 >> /data/local/tmp/mdns.log 2>&1 ) &
 # Radio microphone -> phone microphone is opt-in until a radio has been seen to send it: touch /data/local/tmp/androidplay.mic
-# Secure windows (Spotify sign-in, banking apps) are black on a normal virtual display: the display is marked SECURE so the radio shows
-# them. Verified without a radio: the encoded stream carried Spotify's sign-in screen. Turn off: touch /data/local/tmp/androidplay.nosecure
-SECARG=secure; [ -f /data/local/tmp/androidplay.nosecure ] && SECARG=-
+# Secure windows (Spotify sign-in, banking apps) are black on a normal virtual display. OFF by default; opt in with
+# `touch /data/local/tmp/androidplay.secure` to mark the display SECURE so the radio shows them (verified without a radio:
+# the encoded stream carried Spotify's sign-in screen).
+SECARG=-; [ -f /data/local/tmp/androidplay.secure ] && { SECARG=secure; log "secure windows: ON (flag file present)"; }
 MICARG=""; MICPORT=""
 [ -f /data/local/tmp/androidplay.mic ] && { MICARG=47502; MICPORT=47502; log "radio microphone: ON (flag file present)"; }
 ( sleep 6; [ -x /data/local/tmp/carplay_phone ] && /data/local/tmp/carplay_phone eth0 86400 /data/local/tmp/fix.h264 /data/local/tmp/fix.pcm 47500 /data/local/tmp/touch.fifo 47501 $MICARG >> /data/local/tmp/airplay.log 2>&1 ) &
