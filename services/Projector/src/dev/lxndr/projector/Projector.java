@@ -45,7 +45,7 @@ public final class Projector {
     }
 
     public static void main(String[] a) throws Exception {
-        if (a.length < 6) { System.err.println("usage: W H DPI FPS KBPS SINK_PORT [SECONDS]"); System.exit(2); }
+        if (a.length < 6) { System.err.println("usage: W H DPI FPS KBPS SINK_PORT [SECONDS [AUDIO_PORT [decor|- [MIC_PORT]]]]"); System.exit(2); }
         final int w = Integer.parseInt(a[0]), h = Integer.parseInt(a[1]), dpi = Integer.parseInt(a[2]);
         final int fps = Integer.parseInt(a[3]), kbps = Integer.parseInt(a[4]), port = Integer.parseInt(a[5]);
         final int seconds = a.length > 6 ? Integer.parseInt(a[6]) : 3600;
@@ -60,6 +60,8 @@ public final class Projector {
 
         connectSink(port);
         if (audioPort > 0) AudioTap.start(ctx, audioPort);
+        final int micPort = a.length > 9 ? Integer.parseInt(a[9]) : 0;   // radio microphone -> phone microphone (16 kHz mono PCM in)
+        if (micPort > 0) MicInjector.start(ctx, micPort);
         H264Encoder enc = new H264Encoder(w, h, fps, kbps * 1000, new H264Encoder.Sink() {
             @Override public void onAccessUnit(byte[] au, boolean key, long pts) {
                 DataOutputStream o = out;
