@@ -116,9 +116,9 @@ known yet. To try it before a trip: `adb shell touch /data/local/tmp/androidplay
 `radio microphone attached`. Remove the file to turn it off: `adb shell rm /data/local/tmp/androidplay.mic`. If the radio refuses the extra
 request, the session carries on without it.
 
-Secure windows *(off by default)*: some screens (Spotify's sign-in, banking apps) are marked secure by their app and show black on the radio. To show
-them, mark the projected display secure: `adb shell touch /data/local/tmp/androidplay.secure` before connecting (remove the file to turn it off). Verified
-without a radio only.
+Secure windows *(on by default)*: some screens (Spotify's sign-in, banking apps) are marked secure by their app and would show black on the radio, so the projected
+display is marked secure. It persists across reboots (everything lives in `/data`). To turn it off: `adb shell touch /data/local/tmp/androidplay.nosecure`
+(remove the file to turn it back on). Verified without a radio only.
 
 ## Uninstall / revert
 

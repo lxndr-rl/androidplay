@@ -284,4 +284,4 @@ User report from the radio run of observation 13: touch "works very well, almost
 
 ## Observation 29 - secure windows on the projected display (no radio)
 - [V] The projector's virtual display can be created with `VIRTUAL_DISPLAY_FLAG_SECURE` (bit 2) from the shell uid: no SecurityException. With it, the H.264 stream (decoded on the PC) carried Spotify's sign-in screen, which is black without the flag. The first attempt used the wrong bit (1<<5) and was rejected ("Public display must not be marked as SHOW_WHEN_LOCKED_INSECURE").
-- Opt-in in `swap_to_host_hook.sh` (off by default, changed at the user's request): `touch /data/local/tmp/androidplay.secure` turns it on. Not yet seen on the radio itself.
+- On by default in `swap_to_host_hook.sh` (the user switched it off and back on); `touch /data/local/tmp/androidplay.nosecure` turns it off. Not yet seen on the radio itself.

@@ -117,9 +117,9 @@ Para probarlo antes de un viaje: `adb shell touch /data/local/tmp/androidplay.mi
 mostrará `mic: first packet` (o ninguna línea de mic, lo que significa que esta radio no lo envía) y `projector.log` mostrará `radio microphone attached`.
 Para apagarlo: `adb shell rm /data/local/tmp/androidplay.mic`. Si la radio rechaza la solicitud extra, la sesión sigue sin el micrófono.
 
-Ventanas seguras *(apagado por defecto)*: algunas pantallas (el inicio de sesión de Spotify, apps bancarias) las marca como seguras su app y se ven
-negras en la radio. Para mostrarlas, marca la pantalla proyectada como segura: `adb shell touch /data/local/tmp/androidplay.secure` antes de conectar
-(borra el archivo para apagarlo). Verificado solo sin radio.
+Ventanas seguras *(activado por defecto)*: algunas pantallas (el inicio de sesión de Spotify, apps bancarias) las marca como seguras su app y se verían negras en la
+radio, por eso la pantalla proyectada se marca como segura. Persiste tras reiniciar (todo vive en `/data`). Para apagarlo: `adb shell touch /data/local/tmp/androidplay.nosecure`
+(borra el archivo para volver a activarlo). Verificado solo sin radio.
 
 ## Desinstalar / revertir
 
