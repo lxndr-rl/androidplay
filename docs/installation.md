@@ -66,7 +66,7 @@ names, comma separated) inside the launcher's private files directory.
 
 ## 6. Start the USB mode manager
 
-Presenting Apple USB ids is an **opt-in experiment for your own radio** (`LEGAL-001` in [TASKS.md](../TASKS.md)): the
+Presenting Apple USB ids is an **opt-in experiment for your own radio**: the
 manager refuses to start without the explicit variable below. It is never part of a release image.
 
 ```bash

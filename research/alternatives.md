@@ -123,6 +123,6 @@ Two different wired models exist; they are **not the same thing**:
 Consequences for AndroidPlay (analysis, [U] until the radio is captured):
 - Generic Android head units (Allwinner and similar) usually run a vendor CarPlay app on Android that talks to an iPhone through an **Android-hosted usbmux/lockdown stack**; if that holds for the user's radio, Model 2 applies and the role swap is not needed. This is a hypothesis; the radio's CarPlay stack is unidentified.
 - Our measured FFS path (bulk loopback verified on the S10+) is the transport Model 2 needs. Missing: usbmux framing, lockdown (plist over mux, TLS server), `com.apple.carkit.service`, iAP2 on the pipe, NCM.
-- Both models still need the Apple VID/PID (hosts match by it): LEGAL-001 stays open and is the user's call.
+- Both models still need the Apple VID/PID (hosts match by it): that stays the user's call.
 - OkCarLink is flagged in section A1 (provenance unknown, internal `okcar-*` names). Use as a specification to cross-check, write our own code, do not copy.
 - OkcarOS's kernel route (`f_okcar_*` + `/dev/okcar` mode switch in dwc3 glue) is the heavier alternative; not needed if Model 2 is right.

@@ -66,7 +66,7 @@ vez en la pantalla del teléfono antes de ir al auto. Para fijar u ocultar apps 
 
 ## 6. Inicia el gestor de modo USB
 
-Presentar IDs USB de Apple es un **experimento opcional para tu propia radio** (`LEGAL-001` en [TASKS.md](../TASKS.md)): el
+Presentar IDs USB de Apple es un **experimento opcional para tu propia radio**: el
 gestor se niega a arrancar sin la variable explícita de abajo. Nunca forma parte de una imagen de distribución.
 
 ```bash

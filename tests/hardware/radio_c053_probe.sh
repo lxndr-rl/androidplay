@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# OPT-IN experiment (LEGAL-001 decision 2026-11-14: own radio only, never shipped).
+# OPT-IN experiment (decision 2026-11-14: own radio only, never shipped).
 # Presents Apple's USB identity (05ac:12a8) with an FFS function composed into g1 and serves ep0 with ffs_probe:
 # answers C0 53 with 01 00 00 00, acknowledges 40 51 WITHOUT swapping roles, logs every setup request.
 # Run as root on the phone, detached:  APPLE_ID_OK=own_radio_only [PROBE_MODE=noeps|clone] [SOLE=1] [SWAP=1] [SWEEP=1] radio_c053_probe.sh [seconds]

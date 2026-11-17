@@ -39,7 +39,7 @@ Galaxy S10+  (USB-C)  ==== USB ====  CarPlay head unit (USB host)
 
 - The radio is untrusted input: all RTSP/bplist/iAP2 parsers are bounds-checked and fuzz-ish tested (truncation/corruption loops), run under ASan/UBSan.
 - The MFi certificate and challenge response sent by the radio are **not verified** (we are the verifier role and hold no Apple secret). A verifying policy can hook `onCertificate`/`onAuthResponse`.
-- No extracted Apple keys, no MFi bypass. Identity strings (Apple VID, "iPhone") are an open legal question (`LEGAL-001`).
+- No extracted Apple keys, no MFi bypass. Identity strings (Apple VID, "iPhone") are an open legal question.
 - SELinux must stay enforcing; adb must not be exposed over the network in vehicle mode.
 
 ## Known design risks

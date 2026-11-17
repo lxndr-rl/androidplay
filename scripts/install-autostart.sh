@@ -5,7 +5,7 @@
 # How: `adb remount` puts an overlayfs over /vendor (the real partitions are not written; the changes live in a scratch area
 # that `--remove` empties), then an init .rc is added to /vendor/etc/init. Needs: userdebug build, unlocked bootloader,
 # `adb root`. The first install makes adb remount enable overlayfs and asks for one reboot (done here with `adb reboot`).
-# Owner opt-in: the rc sets APPLE_ID_OK=own_radio_only (see docs/installation.md, LEGAL-001).
+# Owner opt-in: the rc sets APPLE_ID_OK=own_radio_only (see docs/installation.md).
 set -eu
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RC=/vendor/etc/init/androidplay.rc

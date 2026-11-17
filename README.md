@@ -66,6 +66,6 @@ Tests that need no hardware: `scripts/run-tests.sh`. More: [architecture](docs/a
 
 Wired CarPlay requires Apple's MFi authentication; this project **does not** bypass it or ship Apple keys. Presenting Apple
 USB ids is an opt-in experiment for the owner's own radio, refused unless `APPLE_ID_OK=own_radio_only` is set, and kept out
-of any release image (see [research/licensing.md](research/licensing.md) and `LEGAL-001` in [TASKS.md](TASKS.md)). "CarPlay",
+of any release image (see [research/licensing.md](research/licensing.md)). "CarPlay",
 "iPhone", "Android" and "Google Play" are trademarks of their owners; this project is not affiliated with Apple or Google.
 Nothing here touches `/system`, `/vendor` or boot partitions.

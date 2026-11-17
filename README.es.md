@@ -67,6 +67,6 @@ Pruebas que no necesitan hardware: `scripts/run-tests.sh`.
 El CarPlay por cable exige la autenticación MFi de Apple; este proyecto **no** la evita ni incluye claves de Apple. Presentar
 IDs USB de Apple es un experimento opcional para la radio del propio dueño, se rechaza salvo que se defina
 `APPLE_ID_OK=own_radio_only`, y queda fuera de cualquier imagen de distribución (ver
-[research/licensing.md](research/licensing.md) y `LEGAL-001` en [TASKS.md](TASKS.md)). "CarPlay", "iPhone", "Android" y
+[research/licensing.md](research/licensing.md)). "CarPlay", "iPhone", "Android" y
 "Google Play" son marcas de sus dueños; este proyecto no está afiliado a Apple ni a Google. Nada de esto toca `/system`,
 `/vendor` ni las particiones de arranque.

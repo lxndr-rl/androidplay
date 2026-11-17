@@ -40,7 +40,7 @@ Binaries built with NDK 26.1 (aarch64, API 29): `usb/GadgetManager/src/ffs_probe
   - PC `lsusb -v -d 04e8:685d`: `bNumInterfaces 2`; interface 0 = adb (255/66/1, EP1 OUT/IN); interface 1 = our FFS function (255/0/0, bulk EP2 IN 0x82 / OUT 0x02). Our descriptors (66 B) and strings (27 B) were accepted by the kernel.
   - FFS events on ep0: BIND, UNBIND, BIND, ENABLE. No SETUP events (the PC sent no class/vendor request).
   - Cleanup removed the function, UDC rebound, `sys.usb.config=adb`, adb back, 2 funcs -> 1 interface on the PC again (V).
-- Identity used: stock Samsung VID/PID (04e8:685d). No Apple IDs were used (LEGAL-001 open).
+- Identity used: stock Samsung VID/PID (04e8:685d). No Apple IDs were used.
 - NOT shown: bulk data transfer (no PC-side client), iAP2 over the endpoints, the Apple VID/PID, CDC-NCM bring-up, anything with the radio.
 - Design consequence: GadgetManager must compose into the existing gadget (or replace its functions in place) instead of creating `s10carplay`; the unit tests assume a new gadget and need updating.
 

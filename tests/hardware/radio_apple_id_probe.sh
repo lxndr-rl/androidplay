@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# OPT-IN experiment (LEGAL-001, user decision 2026-11-14): present the phone to the user's OWN head unit with
+# OPT-IN experiment (user decision 2026-11-14): present the phone to the user's OWN head unit with
 # Apple's USB identity (05ac:12a8, "Apple Inc."/"iPhone") to see whether the radio starts its CarPlay path.
 # Observation only: no iAP2/usbmux is served. NOT for distribution; never part of a ROM image or release.
 # Usage (root, on the phone):  APPLE_ID_OK=own_radio_only radio_apple_id_probe.sh start [seconds]

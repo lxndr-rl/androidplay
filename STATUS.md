@@ -35,7 +35,7 @@ BLOQUEOS
 5. Protocolo basado en un solo documento de terceros medido en un solo coche.
 
 RIESGOS
-1. Identidad Apple (VID, "iPhone"): cuestión legal abierta (LEGAL-001).
+1. Identidad Apple (VID, "iPhone"): cuestión legal abierta.
 2. Radios modernas pueden exigir cifrado/emparejamiento (no implementado).
 
 SIGUIENTES ACCIONES

@@ -96,7 +96,7 @@ esac
 # a PID file from before a reboot can name an unrelated live process: check the command line too
 OLDPID=$(cat $PIDF 2>/dev/null)
 [ -n "$OLDPID" ] && [ "$OLDPID" != "$$" ] && grep -q androidplayd /proc/$OLDPID/cmdline 2>/dev/null && { echo "already running"; exit 0; }
-# Presenting Apple USB ids is an opt-in experiment for the owner's own radio (LEGAL-001): refuse to start without it.
+# Presenting Apple USB ids is an opt-in experiment for the owner's own radio: refuse to start without it.
 [ "$NOSWITCH" = 1 ] || [ "$APPLE_ID_OK" = own_radio_only ] || { echo "refused: set APPLE_ID_OK=own_radio_only (see docs/installation.md)"; exit 1; }
 [ -f $OFF ] && { echo "kill switch present ($OFF)"; exit 1; }
 # At boot the USB service may not have built the gadget yet: wait for it (up to 120 s) before touching anything.
