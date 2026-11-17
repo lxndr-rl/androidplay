@@ -76,8 +76,10 @@ adb shell /data/local/tmp/androidplayd.sh status        # state=adb ...
 
 Tras cada reinicio del teléfono el gestor **no** está corriendo y el teléfono es un teléfono ADB normal (el estado seguro).
 Ejecuta de nuevo el mismo comando. Interruptor de emergencia: `adb shell touch /data/local/tmp/androidplay.off`. Para parar y
-restaurar la configuración USB original: `adb shell /data/local/tmp/androidplayd.sh stop`. Al parar se corta el enlace USB:
-si después `adb devices` sale vacío, desconecta y vuelve a conectar el cable una vez.
+restaurar la configuración USB original: `adb shell /data/local/tmp/androidplayd.sh stop`. Al parar se corta el enlace USB y puede matar un `adb shell` que lo esté ejecutando a medias (el gadget queda desmontado y el
+teléfono fuera del bus hasta reiniciar): ejecútalo desacoplado, `adb shell 'nohup /data/local/tmp/androidplayd.sh stop >/dev/null 2>&1 &'`,
+y si `adb devices` sale vacío desconecta y vuelve a conectar el cable una vez. Nunca dejes el gestor parado antes de un viaje: con el
+gestor parado la radio ve un teléfono Android normal.
 
 ## 7. Conecta a la radio *(probado en Zlink5)*
 

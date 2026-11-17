@@ -76,8 +76,10 @@ adb shell /data/local/tmp/androidplayd.sh status        # state=adb ...
 
 After every phone reboot the manager is **not** running and the phone is a plain ADB phone (the safe default). Run the same
 command again. Kill switch: `adb shell touch /data/local/tmp/androidplay.off`. To stop and restore the stock USB config:
-`adb shell /data/local/tmp/androidplayd.sh stop`. Stopping drops the USB link: if `adb devices` is empty afterwards,
-unplug and replug the cable once.
+`adb shell /data/local/tmp/androidplayd.sh stop`. Stopping drops the USB link and can kill an `adb shell` that is still running it half way (the gadget is then left torn down
+and the phone stays off the bus until a reboot): run it detached, `adb shell 'nohup /data/local/tmp/androidplayd.sh stop >/dev/null 2>&1 &'`,
+and if `adb devices` is empty afterwards unplug and replug the cable once. Never leave the phone stopped before a trip: a stopped
+manager means the radio sees a plain Android phone.
 
 ## 7. Connect to the radio *(tested on Zlink5)*
 
