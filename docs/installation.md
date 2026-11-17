@@ -109,6 +109,13 @@ status` should answer `state=adb` by itself. Needs a userdebug build with an unl
 Gestures on the projected screen *(implemented, not yet tried on the radio)*: swipe in from the left or right edge = Back, swipe up from the bottom edge = Home, a long
 swipe up = Recents. The Back / Home capsule is also on screen.
 
+Radio microphone *(experimental, off by default)*: the radio's microphone can become the phone's microphone for every app (Waze voice
+commands, voice search). The Android side is verified on the phone with a test tone; whether the radio actually sends microphone audio is not
+known yet. To try it before a trip: `adb shell touch /data/local/tmp/androidplay.mic`, then connect to the radio and say something while an app listens.
+`airplay.log` will show `mic: first packet` (or no mic lines at all, which means this radio does not send it) and `projector.log` will show
+`radio microphone attached`. Remove the file to turn it off: `adb shell rm /data/local/tmp/androidplay.mic`. If the radio refuses the extra
+request, the session carries on without it.
+
 ## Uninstall / revert
 
 ```bash

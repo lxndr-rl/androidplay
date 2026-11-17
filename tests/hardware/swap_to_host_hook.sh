@@ -64,9 +64,12 @@ up() { cut -d. -f1 /proc/uptime; }
   ip -6 rule del pref 17001 2>/dev/null; ip -6 rule add pref 17001 iif lo oif eth0 lookup 4242 2>>$L
   log "eth0 policy route installed"
   [ -x /data/local/tmp/mdns_probe ] && /data/local/tmp/mdns_probe eth0 20 >> /data/local/tmp/mdns.log 2>&1 ) &
-( sleep 6; [ -x /data/local/tmp/carplay_phone ] && /data/local/tmp/carplay_phone eth0 86400 /data/local/tmp/fix.h264 /data/local/tmp/fix.pcm 47500 /data/local/tmp/touch.fifo 47501 >> /data/local/tmp/airplay.log 2>&1 ) &
+# Radio microphone -> phone microphone is opt-in until a radio has been seen to send it: touch /data/local/tmp/androidplay.mic
+MICARG=""; MICPORT=""
+[ -f /data/local/tmp/androidplay.mic ] && { MICARG=47502; MICPORT=47502; log "radio microphone: ON (flag file present)"; }
+( sleep 6; [ -x /data/local/tmp/carplay_phone ] && /data/local/tmp/carplay_phone eth0 86400 /data/local/tmp/fix.h264 /data/local/tmp/fix.pcm 47500 /data/local/tmp/touch.fifo 47501 $MICARG >> /data/local/tmp/airplay.log 2>&1 ) &
 rm -f /data/local/tmp/projector.log
-nohup sh -c "CLASSPATH=/data/local/tmp/projector.dex app_process / dev.lxndr.projector.Projector 1280 720 160 30 4000 47500 86400 47501 > /data/local/tmp/projector.log 2>&1" >/dev/null 2>&1 &
+nohup sh -c "CLASSPATH=/data/local/tmp/projector.dex app_process / dev.lxndr.projector.Projector 1280 720 160 30 4000 47500 86400 47501 - $MICPORT > /data/local/tmp/projector.log 2>&1" >/dev/null 2>&1 &
 sleep 4
 PD=$(grep -o "display=[0-9]*" /data/local/tmp/projector.log | tail -1 | cut -d= -f2); log "projection display=$PD"
 if [ -n "$PD" ]; then

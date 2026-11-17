@@ -33,13 +33,17 @@ int main(int argc, char** argv) {
     SessionRunner runner;
     int timingPort = runner.bindTiming();
     CHECK(timingPort > 0);
-    ClientConfig cfg; cfg.uuid = "U1"; cfg.correlationUuid = "U2"; cfg.timingPort = timingPort;
+    int micPort = runner.bindMic();
+    CHECK(micPort > 0);
+    ClientConfig cfg; cfg.micPort = micPort; cfg.uuid = "U1"; cfg.correlationUuid = "U2"; cfg.timingPort = timingPort;
     cfg.randomConnId = [] { return int64_t(987654321987654321LL); };
     auto t0 = std::chrono::steady_clock::now();
     auto nowUs = [&] { return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count()); };
     cfg.nowNtp = [&] { return ntpFromUnixMicros(1700000000000000ULL + nowUs()); };
     std::vector<TouchEvent> touches; int keyReqs = 0;
-    ClientCallbacks cb; cb.onTouch = [&](const TouchEvent& e) { touches.push_back(e); }; cb.onKeyFrameRequested = [&] { ++keyReqs; };
+    std::vector<uint8_t> micPcm;
+    ClientCallbacks cb; cb.onMic = [&](const uint8_t* d, size_t n) { micPcm.insert(micPcm.end(), d, d + n); };
+    cb.onTouch = [&](const TouchEvent& e) { touches.push_back(e); }; cb.onKeyFrameRequested = [&] { ++keyReqs; };
     Client client(cfg, cb);
 
     CHECK(runner.start(client, "127.0.0.1", car.ctlPort));
@@ -48,6 +52,15 @@ int main(int argc, char** argv) {
     CHECK(!runner.failed());
     if (runner.failed()) std::printf("runner error: %s\n", runner.error().c_str());
     CHECK(client.state() == Client::State::Streaming);
+
+    {   // the radio sends microphone RTP to the UDP port we announced: it must reach onMic as little-endian PCM
+        int u = ::socket(AF_INET, SOCK_DGRAM, 0);
+        sockaddr_in to{}; to.sin_family = AF_INET; to.sin_port = htons(static_cast<uint16_t>(micPort)); to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        const uint8_t pkt[16] = {0x80, 100, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0x12, 0x34, 0xFF, 0x01};
+        ::sendto(u, pkt, sizeof pkt, 0, reinterpret_cast<sockaddr*>(&to), sizeof to); ::close(u);
+        for (int i = 0; i < 20 && micPcm.empty(); ++i) runner.step(10, nowMs());
+        CHECK(micPcm == (std::vector<uint8_t>{0x34, 0x12, 0x01, 0xFF}));
+    }
 
     // Stream ~2.6 s: one AU per 33 ms (looping the fixture), 10 ms audio chunks (looping the 1 s capture).
     size_t ai = 0, pi = 0; uint64_t nextVideo = nowMs(), nextAudio = nowMs(), end = nowMs() + 2600;

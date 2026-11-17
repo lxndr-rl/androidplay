@@ -118,6 +118,9 @@ private:
     std::vector<uint8_t> pend_;
 };
 constexpr size_t kRtpFramesPerPacket = 352;
+// Microphone input (the radio -> us): one RTP packet carrying 16-bit big-endian PCM -> little-endian PCM.
+// Skips CSRC entries and a header extension. Empty if the packet is malformed or has no payload.
+std::vector<uint8_t> rtpPcmToLe(const uint8_t* pkt, size_t n);
 
 // ---------- timing (6.8) ----------
 uint64_t ntpFromUnixMicros(uint64_t unixMicros);   // 32.32 since 1900

@@ -1,6 +1,7 @@
 #include "session_runner.hpp"
 #include <arpa/inet.h>
 #include <cerrno>
+#include <algorithm>
 #include <cstring>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -16,7 +17,7 @@ static void closeFd(int& fd) { if (fd >= 0) { ::close(fd); fd = -1; } }
 SessionRunner::~SessionRunner() { closeAll(); }
 
 void SessionRunner::closeAll() {
-    closeFd(ctl_); closeFd(evt_); closeFd(scr_); closeFd(aud_); closeFd(udpOut_); closeFd(tim_);
+    closeFd(ctl_); closeFd(evt_); closeFd(scr_); closeFd(aud_); closeFd(udpOut_); closeFd(tim_); closeFd(mic_);
 }
 
 bool SessionRunner::fail(const std::string& why) {
@@ -41,6 +42,24 @@ int SessionRunner::bindTiming(bool v6) {
     socklen_t l = sizeof a;
     if (::bind(tim_, reinterpret_cast<sockaddr*>(&a), sizeof a) != 0 || ::getsockname(tim_, reinterpret_cast<sockaddr*>(&a), &l) != 0) { closeFd(tim_); return -1; }
     return ntohs(a.sin_port);
+}
+
+int SessionRunner::bindMic(bool v6) {
+    closeFd(mic_);
+    int fd = ::socket(v6 ? AF_INET6 : AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) return -1;
+    int port = -1;
+    if (v6) {
+        int off = 0; ::setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof off);
+        sockaddr_in6 a{}; a.sin6_family = AF_INET6; a.sin6_addr = in6addr_any; socklen_t l = sizeof a;
+        if (::bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0 && ::getsockname(fd, reinterpret_cast<sockaddr*>(&a), &l) == 0) port = ntohs(a.sin6_port);
+    } else {
+        sockaddr_in a{}; a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_ANY); socklen_t l = sizeof a;
+        if (::bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0 && ::getsockname(fd, reinterpret_cast<sockaddr*>(&a), &l) == 0) port = ntohs(a.sin_port);
+    }
+    if (port < 0) { ::close(fd); return -1; }
+    mic_ = fd;
+    return port;
 }
 
 bool SessionRunner::setTarget(const std::string& host) {
@@ -95,6 +114,7 @@ bool SessionRunner::run(const std::vector<Action>& actions) {
             audioPort_ = a.port;
             if (udpOut_ < 0 && (udpOut_ = ::socket(family_, SOCK_DGRAM, 0)) < 0) return fail("udp socket");
             break;
+        case Action::Kind::OpenMic: break;   // our bound UDP socket already receives; nothing to dial
         case Action::Kind::SendEvent: if (trace) trace("evt-tx", a.bytes.data(), a.bytes.size()); if (evt_ < 0 || !sendAll(evt_, a.bytes)) return fail("event channel not open"); break;
         case Action::Kind::SendScreen: if (scr_ < 0 || !sendAll(scr_, a.bytes)) return fail("screen channel not open"); break;
         case Action::Kind::SendAudio:
@@ -119,10 +139,11 @@ bool SessionRunner::start(Client& client, const std::string& host, int controlPo
 
 bool SessionRunner::step(int timeoutMs, uint64_t nowMs) {
     if (failed_ || !client_) return false;
-    pollfd p[3]; int n = 0, iCtl = -1, iEvt = -1, iTim = -1;
+    pollfd p[4]; int n = 0, iCtl = -1, iEvt = -1, iTim = -1, iMic = -1;
     if (ctl_ >= 0) { iCtl = n; p[n++] = {ctl_, POLLIN, 0}; }
     if (evt_ >= 0) { iEvt = n; p[n++] = {evt_, POLLIN, 0}; }
     if (tim_ >= 0) { iTim = n; p[n++] = {tim_, POLLIN, 0}; }
+    if (mic_ >= 0) { iMic = n; p[n++] = {mic_, POLLIN, 0}; }
     int r = ::poll(p, static_cast<nfds_t>(n), timeoutMs);
     if (r < 0 && errno != EINTR) return fail(std::string("poll: ") + std::strerror(errno));
     uint8_t buf[65536];
@@ -145,6 +166,14 @@ bool SessionRunner::step(int timeoutMs, uint64_t nowMs) {
             if (k > 0) {
                 auto rep = client_->onTimingPacket(buf, static_cast<size_t>(k));
                 if (!rep.empty()) ::sendto(tim_, rep.data(), rep.size(), 0, reinterpret_cast<sockaddr*>(&from), fl);
+            }
+        }
+        if (iMic >= 0 && (p[iMic].revents & POLLIN)) {
+            for (int burst = 0; burst < 32; ++burst) {       // drain what is queued; the radio sends ~50 packets/s
+                ssize_t k = ::recv(mic_, buf, sizeof buf, MSG_DONTWAIT);
+                if (k <= 0) break;
+                if (trace && micSeen_++ < 5) trace("mic-rx", buf, static_cast<size_t>(std::min<ssize_t>(k, 64)));   // first packets, for the log
+                if (!run(client_->onMicPacket(buf, static_cast<size_t>(k)))) return false;
             }
         }
     }

@@ -2,7 +2,8 @@
 // radio and eth0 (CDC NCM) is up. Steps: mDNS-discover the radio's _airplay._tcp over IFACE (IPv6 link-local),
 // `GET /info` on a throwaway connection (logged), then the AirPlay Client sequence (CP-007) through SessionRunner
 // (IPv6), then stream a looped H.264 fixture and a tone (synthetic, NOT the phone screen yet).
-// usage: carplay_phone IFACE SECONDS H264_FIXTURE PCM_FIXTURE [LIVE_PORT [TOUCH_FIFO]]
+// usage: carplay_phone IFACE SECONDS H264_FIXTURE PCM_FIXTURE [LIVE_PORT [TOUCH_FIFO [AUDIO_PORT [MIC_PORT]]]]
+// MIC_PORT (opt-in): ask the radio for its microphone and forward it as 16 kHz mono s16le to TCP 127.0.0.1:MIC_PORT.
 // STATUS: first run against a real radio; nothing is verified until a log says so.
 #include "session_runner.hpp"
 #include <arpa/inet.h>
@@ -122,6 +123,24 @@ struct LiveAudio {
     bool active() const { return cli >= 0; }
 };
 
+// Radio microphone -> projector's MicInjector: connect on the first packet, hang up after 2 s of silence (the phone's real
+// microphone returns), never block the session on it.
+struct MicOut {
+    int fd = -1, port = 0; double last = 0; size_t bytes = 0, packets = 0;
+    void send(const uint8_t* d, size_t n) {
+        if (!port) return;
+        if (fd < 0) {
+            fd = socket(AF_INET, SOCK_STREAM, 0); sockaddr_in a{}; a.sin_family = AF_INET; a.sin_port = htons(port); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            if (connect(fd, (sockaddr*)&a, sizeof a) != 0) { LOG("mic: injector not reachable (errno=%d)", errno); close(fd); fd = -1; return; }
+            fcntl(fd, F_SETFL, O_NONBLOCK); LOG("mic: radio microphone is flowing, injecting");
+        }
+        ssize_t w = ::send(fd, d, n, MSG_NOSIGNAL);
+        if (w < 0 && errno != EAGAIN) { close(fd); fd = -1; return; }
+        last = mono(); bytes += n; if (++packets == 1) LOG("mic: first packet, %zu bytes of PCM", n);
+    }
+    void idle() { if (fd >= 0 && mono() - last > 2.0) { close(fd); fd = -1; LOG("mic: silence, released (%zu bytes total)", bytes); } }
+};
+
 static std::string randHex(int n) { static const char* h = "0123456789ABCDEF"; std::string s; FILE* f = fopen("/dev/urandom", "rb"); for (int i = 0; i < n; i++) { unsigned char c = 0; if (f && fread(&c, 1, 1, f) != 1) c = 0; s += h[c & 15]; } if (f) fclose(f); return s; }
 static std::string uuid() { return randHex(8) + "-" + randHex(4) + "-" + randHex(4) + "-" + randHex(4) + "-" + randHex(12); }
 
@@ -129,6 +148,7 @@ int main(int argc, char** argv) {
     if (argc < 5) { fprintf(stderr, "usage: carplay_phone IFACE SECONDS H264 PCM [LIVE_PORT]\n"); return 2; }
     int livePort = argc > 5 ? atoi(argv[5]) : 0;
     int audioPort = argc > 7 ? atoi(argv[7]) : 0;
+    MicOut mic; mic.port = argc > 8 ? atoi(argv[8]) : 0;
     int touchFd = -1;   // FIFO read by the privileged injector (InputBridge InjectMain): lines "D|M|U x y"
     if (argc > 6) { touchFd = open(argv[6], O_RDWR | O_NONBLOCK); if (touchFd < 0) fprintf(stderr, "touch fifo %s: %s\n", argv[6], strerror(errno)); }
     T0 = mono();
@@ -162,7 +182,9 @@ int main(int argc, char** argv) {
         if (raw) { char tag[5] = {0}; strncpy(tag, ch, 4); uint32_t l = (uint32_t)n; fwrite(tag, 1, 4, raw); fwrite(&l, 4, 1, raw); fwrite(d, 1, n, raw); fflush(raw); }
     };
     int tp = runner.bindTiming(true);
-    ClientConfig cfg; cfg.uuid = uuid(); cfg.correlationUuid = uuid(); cfg.timingPort = tp;
+    int mp = mic.port ? runner.bindMic(true) : 0;
+    if (mic.port) LOG("radio microphone requested: UDP %d -> injector :%d", mp, mic.port);
+    ClientConfig cfg; cfg.micPort = mp > 0 ? mp : 0; cfg.uuid = uuid(); cfg.correlationUuid = uuid(); cfg.timingPort = tp;
     cfg.deviceId = "02:" + randHex(2) + ":" + randHex(2) + ":" + randHex(2) + ":" + randHex(2) + ":" + randHex(2);
     cfg.randomConnId = [] { FILE* f = fopen("/dev/urandom", "rb"); uint64_t v = 0; if (f) { size_t r = fread(&v, 8, 1, f); (void)r; fclose(f); } return int64_t((v >> 1) | 1); };
     cfg.nowNtp = [] { struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts); return ntpFromUnixMicros((uint64_t)ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000); };
@@ -170,6 +192,7 @@ int main(int argc, char** argv) {
         if (e.kind != TouchEvent::Kind::Move) LOG("TOUCH kind=%d x=%d y=%d", (int)e.kind, e.x, e.y);
         if (touchFd >= 0) { char l[48]; int n = snprintf(l, sizeof l, "%c %d %d\n", e.kind == TouchEvent::Kind::Down ? 'D' : e.kind == TouchEvent::Kind::Up ? 'U' : 'M', e.x, e.y); ssize_t w = write(touchFd, l, n); (void)w; }
     };
+    cb.onMic = [&mic](const uint8_t* d, size_t n) { mic.send(d, n); };
     cb.onKeyFrameRequested = [&live] { LOG("radio requested a key frame"); live.keyframe(); };
     cb.onHid = [](const std::string& u, const std::vector<uint8_t>& r) { char h[64] = {0}; for (size_t i = 0; i < r.size() && i < 20; i++) snprintf(h + i * 3, 4, "%02x ", r[i]); LOG("HID report uuid=%s len=%zu bytes=%s", u.c_str(), r.size(), h); };
     Client client(cfg, cb);
@@ -179,6 +202,7 @@ int main(int argc, char** argv) {
     auto nowMs = [] { return (uint64_t)(mono() * 1000); };
     while (mono() < end && !runner.failed()) {
         runner.step(5, nowMs());
+        mic.idle();
         if (client.state() != last) { last = client.state(); LOG("client state=%d failure='%s'", (int)last, client.failure().c_str()); }
         auto liveAus = live.poll();
         auto liveAudioChunks = liveAudio.poll();   // always drain, so frames sent before streaming starts do not pile up

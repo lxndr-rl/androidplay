@@ -21,14 +21,17 @@ struct Harness {
     uint64_t ntp = 1000;
     std::unique_ptr<Client> c;
     int keyReq = 0;
+    std::vector<uint8_t> mic;
 
-    Harness() {
+    explicit Harness(int micPort = 0, bool rejectMic = false) {
+        car.rejectMic = rejectMic; cfg.micPort = micPort;
         cfg.uuid = "UUID-1"; cfg.correlationUuid = "UUID-2"; cfg.timingPort = 5000;
         cfg.randomConnId = [] { return int64_t(123456789012345678LL); };
         cfg.nowNtp = [this] { return ntp; };
         ClientCallbacks cb;
         cb.onTouch = [this](const TouchEvent& e) { touches.push_back(e); };
         cb.onKeyFrameRequested = [this] { ++keyReq; };
+        cb.onMic = [this](const uint8_t* d, size_t n) { mic.insert(mic.end(), d, d + n); };
         c = std::make_unique<Client>(cfg, cb);
     }
     void run(std::vector<Action> acts) {
@@ -42,7 +45,7 @@ struct Harness {
                 more = c->onControlBytes(rep.data(), rep.size());
                 break;
             }
-            case Action::Kind::OpenEvent: case Action::Kind::OpenScreen: case Action::Kind::OpenAudio:
+            case Action::Kind::OpenEvent: case Action::Kind::OpenScreen: case Action::Kind::OpenAudio: case Action::Kind::OpenMic:
                 opened.push_back(a.port); break;
             case Action::Kind::SendScreen: car.onScreen(a.bytes); break;
             case Action::Kind::SendAudio: ++car.audioCount; car.audioPkts = a.bytes; break;
@@ -123,6 +126,38 @@ int main() {
         std::vector<uint8_t> t(32, 0); t[0] = 0x80; t[1] = 0xD2; t[3] = 7; t[24] = 0xAB;
         auto tr = h.c->onTimingPacket(t.data(), t.size());
         CHECK(tr.size() == 32 && tr[1] == 0xD3 && tr[8] == 0xAB);
+    }
+
+    // ---------- microphone input stream (opt-in) ----------
+    {
+        Harness off; off.run(off.c->start());
+        CHECK(off.car.micSetups == 0);                                    // default: nothing extra is asked of the radio
+        Harness h(41000);
+        h.run(h.c->start());
+        CHECK(h.failed.empty() && h.c->state() == Client::State::Streaming);
+        CHECK(h.car.micSetups == 1 && h.car.micType == "speechRecognition" && h.car.micFormat == 0x10 && h.car.micDataPort == 41000);
+        CHECK(h.opened.size() == 4 && h.opened.back() == 7200);           // event, screen, audio, mic data port
+        // RTP from the radio: 12-byte header, big-endian PCM -> little-endian PCM for the injector
+        std::vector<uint8_t> rtp = {0x80, 100, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0x12, 0x34, 0xFF, 0x01};
+        h.run(h.c->onMicPacket(rtp.data(), rtp.size()));
+        CHECK(h.mic == (std::vector<uint8_t>{0x34, 0x12, 0x01, 0xFF}));
+        std::vector<uint8_t> shortPkt(8, 0x80), badVer = {0x40, 100, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2};
+        h.run(h.c->onMicPacket(shortPkt.data(), shortPkt.size()));
+        h.run(h.c->onMicPacket(badVer.data(), badVer.size()));
+        CHECK(h.mic.size() == 4);                                         // malformed packets are dropped
+        // header extension and padding are skipped
+        std::vector<uint8_t> ext = {0xB0, 100, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0xBE, 0xDE, 0, 1, 9, 9, 9, 9, 0xAA, 0xBB, 0xCC, 0xDD, 0, 0, 0, 4};
+        h.mic.clear(); h.run(h.c->onMicPacket(ext.data(), ext.size()));
+        CHECK(h.mic == (std::vector<uint8_t>{0xBB, 0xAA, 0xDD, 0xCC}));
+    }
+    {   // a radio that refuses the microphone must not cost us the session (video and audio keep going)
+        Harness h(41000, true);
+        h.run(h.c->start());
+        CHECK(h.failed.empty() && h.c->state() == Client::State::Streaming);
+        CHECK(h.car.micSetups == 1 && h.opened == (std::vector<int>{7001, 7100, 7200}));
+        auto pcm = std::vector<uint8_t>(1408, 3);
+        h.run(h.c->pushAudioPcm(pcm.data(), pcm.size()));
+        CHECK(h.car.audioCount == 1);
     }
 
     // ---------- car-initiated commands on the event channel ----------

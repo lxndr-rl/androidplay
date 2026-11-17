@@ -325,6 +325,21 @@ std::vector<std::vector<uint8_t>> AudioPacketizer::feed(const uint8_t* d, size_t
 
 std::vector<uint8_t> AudioPacketizer::silence() { return packet(nullptr); }
 
+std::vector<uint8_t> rtpPcmToLe(const uint8_t* p, size_t n) {
+    if (n < 12 || (p[0] >> 6) != 2) return {};
+    size_t off = 12 + 4 * static_cast<size_t>(p[0] & 0x0F);
+    if (p[0] & 0x10) {                                  // header extension: 16-bit id, 16-bit length in words
+        if (n < off + 4) return {};
+        off += 4 + 4 * static_cast<size_t>((p[off + 2] << 8) | p[off + 3]);
+    }
+    size_t pad = (p[0] & 0x20) && n > 0 ? p[n - 1] : 0;
+    if (off >= n || pad > n - off) return {};
+    size_t len = (n - off - pad) & ~static_cast<size_t>(1);
+    std::vector<uint8_t> o(len);
+    for (size_t i = 0; i < len; i += 2) { o[i] = p[off + i + 1]; o[i + 1] = p[off + i]; }   // BE -> LE
+    return o;
+}
+
 // ---------------- timing ----------------
 uint64_t ntpFromUnixMicros(uint64_t us) {
     uint64_t sec = us / 1000000 + 2208988800ULL;

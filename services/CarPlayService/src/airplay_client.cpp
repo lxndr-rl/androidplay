@@ -78,12 +78,32 @@ std::vector<Action> Client::start() {
                             audio_ = std::make_unique<AudioPacketizer>(2);
                             out.push_back(Action{Action::Kind::OpenAudio, r->audioDataPort, {}, {}});
                         }});
+                        if (cfg_.micPort > 0) {
+                            Step mic{"SETUP", "/", bplist::write(audioSetup("speechRecognition", cfg_.micFormat, true, cfg_.micPort, 0)),
+                                     [this](const RtspMessage& m, std::vector<Action>& out) {
+                                auto v = bplist::read(m.body.data(), m.body.size());
+                                auto r = v ? parseSetupReply(*v) : std::nullopt;
+                                out.push_back(Action{Action::Kind::OpenMic, r ? r->audioDataPort : 0, {}, {}});
+                            }};
+                            mic.optional = true;
+                            enqueue(std::move(mic));
+                        }
                     }
                 }});
             }});
         }});
     }});
     sendNext(out);
+    return out;
+}
+
+std::vector<Action> Client::onMicPacket(const uint8_t* rtp, size_t n) {
+    std::vector<Action> out;
+    if (!cb_.onMic) return out;
+    auto pcm = rtpPcmToLe(rtp, n);
+    if (pcm.empty()) return out;
+    ++micPackets_;
+    cb_.onMic(pcm.data(), pcm.size());
     return out;
 }
 
@@ -95,6 +115,7 @@ std::vector<Action> Client::onControlBytes(const uint8_t* d, size_t n) {
         Step st = std::move(*inflight_);
         inflight_.reset();
         if (m.status < 200 || m.status > 299) {
+            if (st.optional) continue;
             fail(st.method + " " + st.path + " -> " + std::to_string(m.status) +
                  (st.path == "/setup" ? " (car may require pairing: unsupported)" : ""), out);
             return out;

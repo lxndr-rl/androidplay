@@ -22,6 +22,9 @@ public:
     // Binds our UDP timing responder (ephemeral port) BEFORE the Client is built: its SETUP carries timingPort.
     // v6=true binds a dual-stack IPv6 socket (needed when the car is an IPv6 link-local peer such as the NCM link).
     int bindTiming(bool v6 = false);
+    // Binds the UDP socket that receives the radio's microphone RTP (ephemeral port, returned; -1 on error). Call BEFORE the
+    // Client is built when ClientConfig.micPort is wanted. Packets reach ClientCallbacks.onMic through Client::onMicPacket.
+    int bindMic(bool v6 = false);
     // Dial the car's RTSP control port, then start the Client and execute its first actions.
     // host: IPv4 dotted quad, or IPv6 literal with optional scope, e.g. "fe80::30c9:b4ff:fe92:809%eth0".
     bool start(Client& client, const std::string& host, int controlPort);
@@ -49,8 +52,9 @@ private:
     socklen_t targetLen_ = 0;
     int family_ = 0;
     bool setTarget(const std::string& host);
-    int ctl_ = -1, evt_ = -1, scr_ = -1, aud_ = -1, udpOut_ = -1, tim_ = -1;
+    int ctl_ = -1, evt_ = -1, scr_ = -1, aud_ = -1, udpOut_ = -1, tim_ = -1, mic_ = -1;
     int audioPort_ = 0;
+    unsigned micSeen_ = 0;
     bool failed_ = false;
     std::string error_;
 };

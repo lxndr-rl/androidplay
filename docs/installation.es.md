@@ -111,6 +111,12 @@ Gestos en la pantalla proyectada *(implementados, aún no probados en la radio)*
 desde el borde inferior = Inicio, deslizamiento largo hacia arriba = Recientes. La cápsula Atrás / Inicio también está en
 pantalla.
 
+Micrófono de la radio *(experimental, apagado por defecto)*: el micrófono de la radio puede ser el micrófono del teléfono para todas las apps (comandos de
+voz de Waze, búsqueda por voz). El lado Android está verificado en el teléfono con un tono de prueba; aún no se sabe si la radio envía audio del micrófono.
+Para probarlo antes de un viaje: `adb shell touch /data/local/tmp/androidplay.mic`, conecta a la radio y habla mientras una app escucha. `airplay.log`
+mostrará `mic: first packet` (o ninguna línea de mic, lo que significa que esta radio no lo envía) y `projector.log` mostrará `radio microphone attached`.
+Para apagarlo: `adb shell rm /data/local/tmp/androidplay.mic`. Si la radio rechaza la solicitud extra, la sesión sigue sin el micrófono.
+
 ## Desinstalar / revertir
 
 ```bash

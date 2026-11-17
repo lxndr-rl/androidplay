@@ -16,6 +16,8 @@ struct FakeReceiver {
     bool failSetup = false;                          // answer SETUP /setup with 466
     bool statsKeepAlive = false;
     bool takeScreen = true;
+    bool rejectMic = false;                          // answer an INPUT (microphone) SETUP with 400
+    std::string micType; int micFormat = 0, micDataPort = 0, micSetups = 0;
     int64_t connId = 0;
     int eventPort = 7001, keepAlivePort = 7002, screenPort = 7100, audioPort = 7200, audioCtlPort = 7201;
     int clientTimingPort = 0;
@@ -57,6 +59,12 @@ struct FakeReceiver {
             } else if (m.path == "/" && m.method == "SETUP" && v) {
                 auto& st = v->get("streams")->a[0];
                 auto type = st.get("type")->i;
+                if (auto* in = st.get("input"); in && in->asBool() && *in->asBool()) {
+                    ++micSetups;
+                    micType = st.get("audioType")->s; micFormat = static_cast<int>(st.get("audioFormat")->i);
+                    if (auto* dp = st.get("dataPort")) micDataPort = static_cast<int>(dp->i);
+                    if (rejectMic) status = 400;
+                }
                 tag += ":" + std::to_string(type);
                 Value s = Value::Dict(); s.set("type", Value::Int(type));
                 if (type == 110) {
