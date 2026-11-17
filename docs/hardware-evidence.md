@@ -266,3 +266,7 @@ User report from the radio run of observation 13: touch "works very well, almost
 - [V] Without `adb root` the manager has no other way to start: this Lineage has no `su` for apps, so an app-side boot receiver cannot do it.
 - NOT verified: arming with no cable after such a boot (needs a trip or an unplugged phone; the armed logic itself was bench-tested in observation 22), and a radio session started from an autostarted manager.
 - Revert: `scripts/install-autostart.sh --remove` (then reboot), or `adb shell touch /data/local/tmp/androidplay.off`.
+
+## Observation 26: armed mode with the autostarted manager, bench test A (2026-11-16)
+- [V from androidplayd.log] manager started by init (not by hand), phone away from the PC with `androidplay.car` forced: cable out at ~196 s (uptime), `idle, no cable ... arming CARPLAY` at 202 s, `state CARPLAY (armed)` at 203 s (about 6 s after the cable left), ids `0x05ac:0x12a8` in the alive lines at 231 s and 265 s; cable into the PC: `PC pattern (SET_CONFIGURATION 0) while armed: back to ADB` at 301 s, `state ADB` at 303 s, the PC listed `04e8:685d` and adb answered without a reboot or a replug.
+- [V] `androidplayd.ctrl.log` stayed empty: no radio asked anything. This proves the arming and recovery logic on the autostarted manager, not radio acceptance.
