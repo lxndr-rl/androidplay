@@ -93,10 +93,15 @@ start) ;;
 *) echo "usage: $0 start|stop|status"; exit 2;;
 esac
 
-[ -f $PIDF ] && kill -0 $(cat $PIDF) 2>/dev/null && { echo "already running"; exit 0; }
+# a PID file from before a reboot can name an unrelated live process: check the command line too
+OLDPID=$(cat $PIDF 2>/dev/null)
+[ -n "$OLDPID" ] && [ "$OLDPID" != "$$" ] && grep -q androidplayd /proc/$OLDPID/cmdline 2>/dev/null && { echo "already running"; exit 0; }
 # Presenting Apple USB ids is an opt-in experiment for the owner's own radio (LEGAL-001): refuse to start without it.
 [ "$NOSWITCH" = 1 ] || [ "$APPLE_ID_OK" = own_radio_only ] || { echo "refused: set APPLE_ID_OK=own_radio_only (see docs/installation.md)"; exit 1; }
 [ -f $OFF ] && { echo "kill switch present ($OFF)"; exit 1; }
+# At boot the USB service may not have built the gadget yet: wait for it (up to 120 s) before touching anything.
+i=0; while [ $i -lt 120 ]; do [ -d $G ] && [ -n "$(ls /sys/class/udc 2>/dev/null)" ] && [ -n "$(cat $G/UDC 2>/dev/null)" ] && break; i=$((i+1)); sleep 1; done
+UDC=$(ls /sys/class/udc | head -1)
 rm -f $D/androidplayd.stop
 echo $$ > $PIDF
 SER_ORIG=$(real_serial)

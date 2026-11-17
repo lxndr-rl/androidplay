@@ -33,7 +33,7 @@ del equipo (cambio de rol USB, control del panel) están aisladas para poder añ
 git clone https://github.com/lxndr-rl/androidplay.git && cd androidplay
 scripts/build-phone.sh                                   # compilar (hacen falta SDK y NDK)
 scripts/deploy-phone.sh                                  # instalar en el teléfono (adb root)
-APPLE_ID_OK=own_radio_only scripts/deploy-phone.sh --start   # iniciar el gestor de modo USB
+scripts/install-autostart.sh                             # armarse solo en cada encendido (servicio init vía overlayfs)
 ```
 
 Luego desconecta del PC, espera ~10 s y conecta a la radio. Pasos completos, requisitos, cómo revertir y solución de
@@ -45,7 +45,7 @@ problemas: **[docs/installation.es.md](docs/installation.es.md)** ([English](doc
 |---|---|
 | Verificado en hardware real | Zlink5 (Allwinner, v5.2.44), segundo puerto USB: sesión, vídeo, audio, táctil, reconexión, modo armado, vuelta a ADB en el PC. Evidencia: [docs/hardware-evidence.md](docs/hardware-evidence.md) (en inglés) |
 | No verificado | cualquier otra radio (una tipo Chevrolet MyLink nunca llegó a una sesión); Waze / Maps / Spotify dentro de la pantalla proyectada; los gestos en la radio; botones multimedia (la Zlink solo expone un HID táctil) |
-| Límites | sin arranque automático (iniciar el gestor tras cada reinicio del teléfono); requiere `adb root` (compilación userdebug) |
+| Límites | requiere `adb root` (compilación userdebug); el autoarranque usa overlayfs de `adb remount` (probado solo en el S10+) |
 
 ## Repositorio
 

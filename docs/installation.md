@@ -74,12 +74,27 @@ APPLE_ID_OK=own_radio_only scripts/deploy-phone.sh --start
 adb shell /data/local/tmp/androidplayd.sh status        # state=adb ...
 ```
 
-After every phone reboot the manager is **not** running and the phone is a plain ADB phone (the safe default). Run the same
-command again. Kill switch: `adb shell touch /data/local/tmp/androidplay.off`. To stop and restore the stock USB config:
+Without autostart (next section) the manager is **not** running after a phone reboot and the phone is a plain ADB phone (the
+safe default); run the same command again. Kill switch: `adb shell touch /data/local/tmp/androidplay.off`. To stop and restore the stock USB config:
 `adb shell /data/local/tmp/androidplayd.sh stop`. Stopping drops the USB link and can kill an `adb shell` that is still running it half way (the gadget is then left torn down
 and the phone stays off the bus until a reboot): run it detached, `adb shell 'nohup /data/local/tmp/androidplayd.sh stop >/dev/null 2>&1 &'`,
 and if `adb devices` is empty afterwards unplug and replug the cable once. Never leave the phone stopped before a trip: a stopped
 manager means the radio sees a plain Android phone.
+
+## 6b. Autostart at every boot (recommended)
+
+A manager that dies with each reboot means a lost trip: the radio sees a plain Android phone. This installs an `init` service
+so the phone arms itself without a PC:
+
+```bash
+scripts/install-autostart.sh          # one automatic reboot at the end; undo with --remove
+```
+
+How it works *(tested)*: `adb remount` puts an overlayfs over `/vendor` (the real partitions are not written; the changes live in
+a scratch area), and `/vendor/etc/init/androidplay.rc` starts the manager after `sys.boot_completed`, restarting it if it dies.
+The `.rc` carries the `APPLE_ID_OK=own_radio_only` opt-in of section 6: delete it with `--remove` to revoke. It never blocks boot, and
+the kill switch `touch /data/local/tmp/androidplay.off` still works. After the reboot `adb shell /data/local/tmp/androidplayd.sh
+status` should answer `state=adb` by itself. Needs a userdebug build with an unlocked bootloader. Not tried on any other phone.
 
 ## 7. Connect to the radio *(tested on Zlink5)*
 
@@ -121,5 +136,5 @@ More: [troubleshooting.md](troubleshooting.md), [mode-manager.md](mode-manager.m
 ## Known limits
 
 - Tested on one phone and one radio. A Chevrolet MyLink-type radio reached the first USB handshake but never a session.
-- No boot-time autostart without root tooling; the manager is started by hand after a reboot.
+- Autostart relies on `adb remount` overlayfs support (tested on the S10+ only); without it the manager is started by hand after a reboot.
 - Waze / Maps / Spotify inside the projected display are untested.

@@ -74,12 +74,28 @@ APPLE_ID_OK=own_radio_only scripts/deploy-phone.sh --start
 adb shell /data/local/tmp/androidplayd.sh status        # state=adb ...
 ```
 
-Tras cada reinicio del teléfono el gestor **no** está corriendo y el teléfono es un teléfono ADB normal (el estado seguro).
-Ejecuta de nuevo el mismo comando. Interruptor de emergencia: `adb shell touch /data/local/tmp/androidplay.off`. Para parar y
+Sin autoarranque (sección siguiente) el gestor **no** corre tras reiniciar el teléfono y este es un teléfono ADB normal (el estado
+seguro); ejecuta de nuevo el mismo comando. Interruptor de emergencia: `adb shell touch /data/local/tmp/androidplay.off`. Para parar y
 restaurar la configuración USB original: `adb shell /data/local/tmp/androidplayd.sh stop`. Al parar se corta el enlace USB y puede matar un `adb shell` que lo esté ejecutando a medias (el gadget queda desmontado y el
 teléfono fuera del bus hasta reiniciar): ejecútalo desacoplado, `adb shell 'nohup /data/local/tmp/androidplayd.sh stop >/dev/null 2>&1 &'`,
 y si `adb devices` sale vacío desconecta y vuelve a conectar el cable una vez. Nunca dejes el gestor parado antes de un viaje: con el
 gestor parado la radio ve un teléfono Android normal.
+
+## 6b. Autoarranque en cada encendido (recomendado)
+
+Un gestor que muere con cada reinicio significa un viaje perdido: la radio ve un teléfono Android normal. Esto instala un servicio
+de `init` para que el teléfono se arme solo, sin PC:
+
+```bash
+scripts/install-autostart.sh          # un reinicio automático al final; se deshace con --remove
+```
+
+Cómo funciona *(probado)*: `adb remount` pone un overlayfs sobre `/vendor` (no se escriben las particiones reales; los cambios
+viven en un área aparte), y `/vendor/etc/init/androidplay.rc` arranca el gestor tras `sys.boot_completed`, reiniciándolo si
+muere. El `.rc` lleva el consentimiento `APPLE_ID_OK=own_radio_only` de la sección 6: bórralo con `--remove` para revocarlo. Nunca
+bloquea el arranque y el interruptor `touch /data/local/tmp/androidplay.off` sigue funcionando. Tras el reinicio
+`adb shell /data/local/tmp/androidplayd.sh status` debe responder `state=adb` por sí solo. Requiere una compilación userdebug con
+bootloader desbloqueado. No probado en otros teléfonos.
 
 ## 7. Conecta a la radio *(probado en Zlink5)*
 
@@ -122,5 +138,5 @@ Más: [troubleshooting.md](troubleshooting.md), [mode-manager.md](mode-manager.m
 ## Límites conocidos
 
 - Probado con un teléfono y una radio. Una radio tipo Chevrolet MyLink llegó al primer saludo USB pero nunca a una sesión.
-- Sin arranque automático al encender sin herramientas root; el gestor se inicia a mano tras reiniciar.
+- El autoarranque depende del soporte de overlayfs de `adb remount` (probado solo en el S10+); sin él el gestor se inicia a mano tras reiniciar.
 - Waze / Maps / Spotify dentro de la pantalla proyectada no están probados.

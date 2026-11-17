@@ -32,7 +32,7 @@ Built and tested on a Samsung Galaxy S10+ (SM-G975F, LineageOS 23.2) with a Zlin
 git clone https://github.com/lxndr-rl/androidplay.git && cd androidplay
 scripts/build-phone.sh                                   # build (SDK + NDK needed)
 scripts/deploy-phone.sh                                  # install on the phone (adb root)
-APPLE_ID_OK=own_radio_only scripts/deploy-phone.sh --start   # start the USB mode manager
+scripts/install-autostart.sh                             # arm itself at every boot (init service via overlayfs)
 ```
 
 Then unplug from the PC, wait ~10 s and plug into the radio. Full steps, requirements, revert and troubleshooting:
@@ -44,7 +44,7 @@ Then unplug from the PC, wait ~10 s and plug into the radio. Full steps, require
 |---|---|
 | Verified on real hardware | Zlink5 (Allwinner, v5.2.44), second USB port: session, video, audio, touch, reconnect, armed mode, PC fallback. Evidence: [docs/hardware-evidence.md](docs/hardware-evidence.md) |
 | Not verified | any other radio (a Chevrolet MyLink-type unit never reached a session); Waze / Maps / Spotify inside the projected display; the edge gestures on the radio; media buttons (the Zlink exposes only a touch HID) |
-| Limits | no boot-time autostart (start the manager after each phone reboot); needs `adb root` (userdebug build) |
+| Limits | needs `adb root` (userdebug build); autostart uses `adb remount` overlayfs (tested on the S10+ only) |
 
 ## Repository
 

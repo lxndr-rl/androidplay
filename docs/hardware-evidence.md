@@ -258,3 +258,11 @@ User report from the radio run of observation 13: touch "works very well, almost
 - [V from the user's photos] **Kia radio** (UI7 build 2023-04-01, system version `4.0.0.04/01/23 17:45.bcb2075`, SDK `25.0.0.4.0.0.12.4`, GPL Nov12 18:34): home tiles Radio, Teléfono, USB, Ajustes, an orange "Link" tile and Bluetooth music; with nothing connected it says "Por favor conecta tu teléfono". Not yet probed at USB level.
 - [V] Neither radio detected the phone on this trip. [HYPOTHESIS, to confirm from androidplayd.log] the manager was stopped (a `stop` run for a test left adb off the bus and it was never restarted), so the phone presented Samsung ids, not Apple ids, to both radios. This trip says nothing about armed mode.
 - Lesson recorded: after any `stop`, restart the manager before the user leaves the PC; `deploy-phone.sh --start` should be the last thing run.
+
+## Observation 25: boot autostart through an init service on an overlayfs /vendor (2026-11-16)
+- [V] `adb remount` on this build (userdebug, Android 16, ext4 system, erofs vendor, bootloader unlocked) enabled overlayfs and asked for a reboot; no partition was written. A test `.rc` in `/vendor/etc/init` ran at boot as `u:r:su:s0` and the overlay survived the reboot.
+- [V] The manager now starts by itself: `init.svc.androidplayd=running`, USB composed 26 s after boot, `state=adb`, adb reachable, no command from the PC.
+- [V] Two bugs found by doing it: (1) the shutdown SIGTERM leaves `androidplayd.stop`, which made the boot service exit at once (the rc now clears it); (2) a PID file from before the reboot named an unrelated live process, so `start` said "already running" (now also checks `/proc/PID/cmdline`).
+- [V] Without `adb root` the manager has no other way to start: this Lineage has no `su` for apps, so an app-side boot receiver cannot do it.
+- NOT verified: arming with no cable after such a boot (needs a trip or an unplugged phone; the armed logic itself was bench-tested in observation 22), and a radio session started from an autostarted manager.
+- Revert: `scripts/install-autostart.sh --remove` (then reboot), or `adb shell touch /data/local/tmp/androidplay.off`.

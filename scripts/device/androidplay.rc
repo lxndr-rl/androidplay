@@ -1,0 +1,15 @@
+# AndroidPlay autostart: runs the USB mode manager at every boot, as root, from /data/local/tmp (so the script can be updated
+# without touching this file). Installed into /vendor/etc/init through overlayfs by scripts/install-autostart.sh.
+# The setenv lines are the owner's opt-in to present Apple USB ids to their own radio (LEGAL-001); remove the service to revoke.
+# A stop file left by the shutdown SIGTERM is cleared at boot. Kill switch: touch /data/local/tmp/androidplay.off. The service never blocks boot (started after sys.boot_completed).
+service androidplayd /system/bin/sh -c "rm -f /data/local/tmp/androidplayd.stop; while [ ! -f /data/local/tmp/androidplay.off ]; do /data/local/tmp/androidplayd.sh start; [ -f /data/local/tmp/androidplayd.stop ] && break; sleep 5; done"
+    user root
+    group root
+    seclabel u:r:su:s0
+    setenv APPLE_ID_OK own_radio_only
+    setenv SOLE 1
+    disabled
+    oneshot
+
+on property:sys.boot_completed=1
+    start androidplayd
