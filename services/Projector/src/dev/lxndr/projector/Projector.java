@@ -50,7 +50,8 @@ public final class Projector {
         final int fps = Integer.parseInt(a[3]), kbps = Integer.parseInt(a[4]), port = Integer.parseInt(a[5]);
         final int seconds = a.length > 6 ? Integer.parseInt(a[6]) : 3600;
         final int audioPort = a.length > 7 ? Integer.parseInt(a[7]) : 0;
-        final boolean decor = a.length > 8 && a[8].equals("decor");   // experiment: let the IME / system decorations live on this display
+        final boolean decor = a.length > 8 && a[8].contains("decor");   // experiment: let the IME / system decorations live on this display
+        final boolean secure = a.length > 8 && a[8].contains("secure");   // VIRTUAL_DISPLAY_FLAG_SECURE: show FLAG_SECURE windows (needs CAPTURE_SECURE_VIDEO_OUTPUT)
         if (Looper.getMainLooper() == null) Looper.prepareMainLooper();
         Class<?> at = Class.forName("android.app.ActivityThread");
         Object thread = at.getMethod("systemMain").invoke(null);
@@ -75,6 +76,7 @@ public final class Projector {
         int flags = PUBLIC | PRESENTATION | OWN_CONTENT_ONLY | SUPPORTS_TOUCH | ROTATES_WITH_CONTENT | DESTROY_CONTENT_ON_REMOVAL
                 | TRUSTED | OWN_DISPLAY_GROUP | ALWAYS_UNLOCKED | TOUCH_FEEDBACK_DISABLED | OWN_FOCUS;
         if (decor) flags |= SHOW_SYSTEM_DECORATIONS;
+        if (secure) flags |= 1 << 2;   // VIRTUAL_DISPLAY_FLAG_SECURE
         VirtualDisplay vd = dm.createVirtualDisplay("androidplay", w, h, dpi, s, flags);
         if (vd == null) { System.err.println("createVirtualDisplay returned null"); System.exit(1); }
         int id = vd.getDisplay().getDisplayId();
