@@ -152,6 +152,12 @@ GUARD=$!
 
 trap 'stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0' TERM INT
 SERVED=0; NA=0; TICK=0; MISS=0; CFG=0; LAST_GENERIC=-9999; ARMED=0; NAI=0; CP_ENTER=0; CP_SINCE=$(cut -d. -f1 /proc/uptime); WANT_AT=0; TEMP_ADB=0
+# Armed from the first second. Booting (or starting) with the cable already in a radio used to leave the phone as plain ADB until the cable was
+# pulled: the radio then probed AOA, saw an Android and gave up before the slow AOA->CARPLAY switch finished (Captiva, 2026-11-17). A PC
+# plugged at that moment is not a problem: its SET_CONFIGURATION 0 (or CARPLAY_GRACE s without an Apple request) returns us to ADB.
+if [ "$NOSWITCH" != 1 ] && [ "$(want_state)" = carplay ]; then
+  touch $D/s10.switching; ensure_composed; to_carplay "armed at start"; ARMED=1; TEMP_ADB=0; rm -f $D/s10.switching
+fi
 while :; do
   sleep 1
   [ -f $OFF ] && { log "kill switch: stopping"; stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0; }
