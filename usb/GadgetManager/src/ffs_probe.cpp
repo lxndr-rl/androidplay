@@ -97,6 +97,20 @@ int main(int argc, char** argv) {
             SetupPacket sp = parse_setup(ev.setup);
             printf(" setup type=%02x req=%02x val=%04x idx=%04x len=%u", sp.type, sp.request, sp.value, sp.index, sp.length);
             Ep0Result r = h.handle(sp);
+            // Learning / per-radio profile: the manager writes the answer to `c0 53` (8 hex digits) into S10_REPLY_FILE; absent or
+            // malformed = the baseline from the handler. Re-read on every query so the manager never has to restart this process.
+            if (sp.type == 0xC0 && sp.request == 0x53 && r.action == Ep0Action::Reply) {
+                const char* rf = getenv("S10_REPLY_FILE"); if (!rf || !*rf) rf = "/data/local/tmp/androidplay.reply";
+                if (FILE* f = fopen(rf, "r")) {
+                    char hex[32] = {0}; if (fgets(hex, sizeof hex, f)) {
+                        unsigned b[4]; if (sscanf(hex, "%2x%2x%2x%2x", &b[0], &b[1], &b[2], &b[3]) == 4) {
+                            r.data.assign(4, 0); for (int k = 0; k < 4; k++) r.data[k] = static_cast<uint8_t>(b[k]);
+                            printf(" [answer from %s: %02x %02x %02x %02x]", rf, b[0], b[1], b[2], b[3]);
+                        }
+                    }
+                    fclose(f);
+                }
+            }
             // Experiment (S10_REPLY_SWEEP=1): a radio that sends C0 53 but never follows with 40 51 may want a different answer.
             // Every other C0 53 gets the known-good 01 00 00 00 (so Zlink still works); the odd ones walk a list of variants.
             if (sweep && sp.type == 0xC0 && sp.request == 0x53 && r.action == Ep0Action::Reply) {

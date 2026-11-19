@@ -121,6 +121,27 @@ Ventanas seguras *(activado por defecto)*: algunas pantallas (el inicio de sesi�
 radio, por eso la pantalla proyectada se marca como segura. Persiste tras reiniciar (todo vive en `/data`). Para apagarlo: `adb shell touch /data/local/tmp/androidplay.nosecure`
 (borra el archivo para volver a activarlo). Verificado solo sin radio.
 
+## Antes y después de un viaje
+
+- **Antes:** `scripts/preflight.sh` (teléfono en el PC) responde GO o NO-GO: gestor en marcha, arranque automático instalado, sin interruptor de
+  apagado, batería, espacio. Luego desconecta, espera 10 s y comprueba que la **notificación AndroidPlay del teléfono dice ARMED**. Si dice NOT armed,
+  no salgas.
+- **Después, si no funcionó:** conecta el teléfono al PC y ejecuta `scripts/pull-evidence.sh <etiqueta>` **antes que nada**. No lo reinicies ni
+  reinicies el gestor antes. Copia los registros en vivo y el archivo del propio teléfono (`/data/local/tmp/archive/`, una copia en cada arranque,
+  episodio de conexión y sesión, se conservan las 60 últimas) a `../s10caros-evidence-archive/`.
+- **Banco, antes de cambiar el gestor:** `tests/hardware/bench_matrix.sh` reproduce las radios que hemos conocido (cable ya puesto al arrancar, un host que
+  pregunta primero por Apple, una respuesta por radio) contra el gestor real, con el PC haciendo de radio.
+
+### Una radio que no arranca (modo de aprendizaje)
+
+Si una radio pregunta `c0 53` pero no continúa, aparca junto a ella y deja que el teléfono pruebe una respuesta por episodio de conexión:
+```bash
+adb shell 'echo captiva > /data/local/tmp/androidplay.radio; touch /data/local/tmp/androidplay.learn'
+```
+Cada vez que la radio se rinde y vuelve a conectar, el gestor registra `learn: next N ...` y prueba la siguiente respuesta. Cuando la radio pide el cambio
+de roles, la respuesta se guarda para ese nombre en `androidplay.profile`, y desde entonces `androidplay.radio` la selecciona. Las demás radios (Zlink
+incluida) mantienen la respuesta por defecto. Apaga el aprendizaje con `adb shell rm /data/local/tmp/androidplay.learn`. Aún no probado en ninguna radio.
+
 ## Desinstalar / revertir
 
 ```bash

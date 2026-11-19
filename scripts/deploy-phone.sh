@@ -12,8 +12,10 @@ adb root >/dev/null 2>&1 || true; sleep 2
 D=/data/local/tmp
 for f in gadget_manager ffs_probe mdns_probe carplay_phone usb_host_iap2 projector.dex inject.dex; do adb push "$PH/$f" $D/ >/dev/null; done
 adb push "$ROOT/scripts/device/androidplayd.sh" $D/ >/dev/null
+adb push "$ROOT/scripts/device/learn.sh" $D/ >/dev/null
+adb push "$ROOT/scripts/device/archive_logs.sh" $D/ >/dev/null
 adb push "$ROOT/tests/hardware/swap_to_host_hook.sh" $D/ >/dev/null
-adb shell "chmod 755 $D/gadget_manager $D/ffs_probe $D/mdns_probe $D/carplay_phone $D/usb_host_iap2 $D/androidplayd.sh $D/swap_to_host_hook.sh"
+adb shell "chmod 755 $D/gadget_manager $D/ffs_probe $D/mdns_probe $D/carplay_phone $D/usb_host_iap2 $D/androidplayd.sh $D/learn.sh $D/archive_logs.sh $D/swap_to_host_hook.sh"
 adb install -r "$PH/CarLauncher-debug.apk" >/dev/null
 adb install -r "$PH/ProjectionService-debug.apk" >/dev/null
 P=dev.lxndr.launcher

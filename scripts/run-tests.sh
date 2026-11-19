@@ -38,7 +38,7 @@ if command -v make >/dev/null && command -v g++ >/dev/null; then
 else skipit gadgetmanager "make/g++ missing"; fi
 
 # --- script syntax ---
-bad=0; for f in "$ROOT"/scripts/*.sh; do bash -n "$f" || bad=1; done
+bad=0; for f in "$ROOT"/scripts/*.sh "$ROOT"/scripts/device/*.sh "$ROOT"/tests/hardware/*.sh "$ROOT"/tests/device/*.sh; do bash -n "$f" || bad=1; done
 if [ $bad -eq 0 ]; then pass=$((pass+1)); REPORT+=("PASS  scripts-syntax"); else fail=$((fail+1)); REPORT+=("FAIL  scripts-syntax"); fi
 
 # --- CarLauncher core (plain Java, no Android) ---
@@ -52,6 +52,9 @@ if [ -x "$ROOT/services/InputBridge/build.sh" ]; then
   if command -v javac >/dev/null; then run inputbridge-core "$ROOT/services/InputBridge/build.sh" test
   else skipit inputbridge-core "javac missing"; fi
 fi
+
+# --- phone-side shell logic (learning ladder, per-radio profiles, evidence archive) ---
+if [ -x "$ROOT/tests/device/learn_test.sh" ]; then run device-shell "$ROOT/tests/device/learn_test.sh"; fi
 
 echo "=== AndroidPlay Level-1 test report ($(date -u +%FT%TZ)) ==="
 printf '%s\n' "${REPORT[@]}"

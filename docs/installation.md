@@ -120,6 +120,26 @@ Secure windows *(on by default)*: some screens (Spotify's sign-in, banking apps)
 display is marked secure. It persists across reboots (everything lives in `/data`). To turn it off: `adb shell touch /data/local/tmp/androidplay.nosecure`
 (remove the file to turn it back on). Verified without a radio only.
 
+## Before and after a trip
+
+- **Before:** `scripts/preflight.sh` (phone on the PC) answers GO or NO-GO: manager running, autostart installed, no kill switch, battery, space.
+  Then unplug, wait 10 s, and check that the **AndroidPlay notification on the phone says ARMED**. If it says NOT armed, do not go.
+- **After, if it did not work:** plug the phone into the PC and run `scripts/pull-evidence.sh <label>` **before anything else**. Do not reboot or
+  restart the manager first. It copies the live logs and the phone's own archive (`/data/local/tmp/archive/`, one snapshot at every boot, plug
+  episode and session, newest 60 kept) to `../s10caros-evidence-archive/`.
+- **Bench, before changing the manager:** `tests/hardware/bench_matrix.sh` plays the head units we have met (cable already in at boot, a host that
+  asks Apple first, a per-radio answer) against the real manager, with the PC as the radio.
+
+### A radio that does not start (learning mode)
+
+If a radio asks `c0 53` but never continues, park next to it and let the phone try one answer per plug episode:
+```bash
+adb shell 'echo captiva > /data/local/tmp/androidplay.radio; touch /data/local/tmp/androidplay.learn'
+```
+Each time the radio gives up and re-plugs, the manager logs `learn: next N ...` and tries the next answer. When the radio asks for the role swap, the
+answer is saved for that radio name in `androidplay.profile`, and from then on `androidplay.radio` selects it. Other radios (Zlink included) keep the
+default answer. Turn learning off with `adb shell rm /data/local/tmp/androidplay.learn`. Not yet tried on any radio.
+
 ## Uninstall / revert
 
 ```bash

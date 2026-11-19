@@ -26,10 +26,18 @@ CARPLAY_GRACE=${CARPLAY_GRACE:-25}
 GENERIC=${GENERIC:-1}          # unknown-host trigger (hosts that never send the AOA probe, e.g. the Chevrolet radio)
 GENERIC_WAIT=${GENERIC_WAIT:-8}  # seconds the USB must stay configured with no adb connection before trying CARPLAY
 GENERIC_COOLDOWN=${GENERIC_COOLDOWN:-120}
-SWEEP=${SWEEP:-1}              # every other c0 53 answered with a different value (data for hosts that stop after c0 53)
+SWEEP=${SWEEP:-0}              # OFF by default: every other c0 53 would get a different value, which can sabotage a radio that asks only twice
+                               # (Captiva 2026-11-17). Per-radio answers are chosen by learning mode / profiles instead (learn.sh).
 UDC=$(ls /sys/class/udc | head -1)
 t() { cut -d' ' -f1 /proc/uptime; }
 log() { echo "$(t) $*" >> $LOG; }
+# Pre-flight indicator: a notification on the phone and a status file say what the manager is doing right now, so nobody has to guess
+# before driving ("Armed: waiting for the radio" is the only state worth leaving the house with).
+notify() { echo "$(date +%H:%M:%S 2>/dev/null) $*" > $D/androidplayd.status; cmd notification post -S bigtext -t AndroidPlay androidplay "$*" >/dev/null 2>&1; }
+# per-radio learning and evidence archive (optional files: without them the manager behaves as before)
+[ -f $D/learn.sh ] && . $D/learn.sh
+type learn_active >/dev/null 2>&1 || { learn_active() { return 1; }; learn_fail() { :; }; learn_success() { :; }; profile_apply() { :; }; }
+archive() { [ -x $D/archive_logs.sh ] && $D/archive_logs.sh "$1" >/dev/null 2>&1; }
 want_state() {
   [ -f $D/androidplay.home ] && { echo adb; return; }
   [ -f $D/androidplay.car ] && { echo carplay; return; }
@@ -64,8 +72,8 @@ ensure_composed() {   # $1 = force: also strip links Android added (accessory fu
   echo $UDC > $G/UDC; sleep 1
   log "recomposed (cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"
 }
-to_adb()     { setids 0x04e8 0x685d samsung SM-G975F "$SER_ORIG"; echo adb > $STATE; log "state ADB"; }
-to_carplay() { setids 0x05ac 0x12a8 "Apple Inc." iPhone "$SER_APPLE"; echo carplay > $STATE; CP_SINCE=$(cut -d. -f1 /proc/uptime); CP_ENTER=$CP_SINCE; rm -f $D/s10.cfg0; log "state CARPLAY ($1)"; }
+to_adb()     { setids 0x04e8 0x685d samsung SM-G975F "$SER_ORIG"; echo adb > $STATE; log "state ADB"; notify "NOT armed: plain ADB phone (PC or home). Unplug and wait 10 s to arm."; }
+to_carplay() { setids 0x05ac 0x12a8 "Apple Inc." iPhone "$SER_APPLE"; echo carplay > $STATE; CP_SINCE=$(cut -d. -f1 /proc/uptime); CP_ENTER=$CP_SINCE; rm -f $D/s10.cfg0; log "state CARPLAY ($1)"; notify "ARMED: waiting for the radio ($1)"; }
 
 kill_tracers() { for p in $(ps -A -o PID,ARGS | grep "[c]at /sys/kernel/tracing/trace_pipe" | awk '{print $1}'); do kill $p 2>/dev/null; done; }
 
@@ -108,6 +116,9 @@ SER_ORIG=$(real_serial)
 SER_APPLE=00008030-001A2B3C4D5E6F78    # iPhone-style 25-char serial (made-up value)
 log "start: ids=$(cat $G/idVendor):$(cat $G/idProduct) udc=$(cat $G/UDC) serial_orig=$SER_ORIG"
 
+# keep what the previous run left behind (the next lines truncate/overwrite the per-session logs), then pick this radio's answer
+archive boot
+profile_apply
 # compose our function next to adb. Its interface class is ff/00/00 (NOT adb's ff/42/01): a PC's adb picks the first interface
 # matching ff/42/01, and when ours came first adb stopped seeing the phone (seen 2026-11-15, order flips after a cable cycle)
 # compose our function next to adb (FunctionFS must have its descriptors before the UDC is bound again)
@@ -152,6 +163,7 @@ GUARD=$!
 
 trap 'stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0' TERM INT
 SERVED=0; NA=0; TICK=0; MISS=0; CFG=0; LAST_GENERIC=-9999; ARMED=0; NAI=0; CP_ENTER=0; CP_SINCE=$(cut -d. -f1 /proc/uptime); WANT_AT=0; TEMP_ADB=0
+EP_APPLE=0; EP_OK=0; EP_AOA=0   # what the radio did in this plug episode (learning mode and the archive use it)
 # Armed from the first second. Booting (or starting) with the cable already in a radio used to leave the phone as plain ADB until the cable was
 # pulled: the radio then probed AOA, saw an Android and gave up before the slow AOA->CARPLAY switch finished (Captiva, 2026-11-17). A PC
 # plugged at that moment is not a problem: its SET_CONFIGURATION 0 (or CARPLAY_GRACE s without an Apple request) returns us to ADB.
@@ -199,6 +211,7 @@ while :; do
       fi
     fi
     if [ -f $D/s10.aoa ]; then
+      EP_AOA=1
       rm -f $D/s10.aoa $D/s10.apple
       if [ "$NOSWITCH" = 1 ]; then log "NOSWITCH: would switch to CARPLAY now"; else
         touch $D/s10.switching
@@ -208,9 +221,9 @@ while :; do
       fi
     fi
   else   # carplay
-    if [ -d $D/swap.lock ]; then SERVED=1; continue; fi          # a session is running
+    if [ -d $D/swap.lock ]; then SERVED=1; EP_OK=1; continue; fi   # a session is running
     if [ $SERVED = 1 ]; then                                      # it just ended (cleanup removed the lock)
-      SERVED=0; rm -f $D/s10.aoa $D/s10.apple $D/s10.cfg0
+      SERVED=0; rm -f $D/s10.aoa $D/s10.apple $D/s10.cfg0; archive session
       if [ $ARMED = 1 ]; then log "session ended; staying armed"; CP_SINCE=$(cut -d. -f1 /proc/uptime); continue; fi
       touch $D/s10.switching; to_adb; rm -f $D/s10.switching; continue
     fi
@@ -220,6 +233,16 @@ while :; do
       if [ $((NOW - CP_ENTER)) -ge 6 ]; then NA=$((NA+1)); else NA=0; fi
       rm -f $D/s10.cfg0
       if [ $NA -ge 2 ]; then
+        # the plug episode is over: record what the radio did, and let learning mode try the next answer if it asked but never swapped
+        if [ $EP_APPLE = 1 ] || [ $EP_OK = 1 ] || [ $EP_AOA = 1 ]; then
+          log "episode over: aoa=$EP_AOA apple_probe=$EP_APPLE role_swap=$EP_OK"
+          if learn_active; then
+            if [ $EP_OK = 1 ]; then log "learn: $(learn_success)"
+            elif [ $EP_APPLE = 1 ]; then log "learn: $(learn_fail)"; fi
+          fi
+          archive episode
+        fi
+        EP_APPLE=0; EP_OK=0; EP_AOA=0
         if [ $ARMED = 1 ]; then
           [ "$(want_state)" = adb ] && { log "armed but now at home: back to ADB"; NA=0; touch $D/s10.switching; to_adb; ARMED=0; rm -f $D/s10.switching; }
         else
@@ -229,7 +252,7 @@ while :; do
       fi
     else
       NA=0
-      if [ -f $D/s10.apple ]; then rm -f $D/s10.apple $D/s10.cfg0; CP_SINCE=$NOW; fi   # a radio is talking Apple: keep waiting
+      if [ -f $D/s10.apple ]; then rm -f $D/s10.apple $D/s10.cfg0; CP_SINCE=$NOW; EP_APPLE=1; fi   # a radio is talking Apple: keep waiting
       # a PC closes the configuration it just opened (SET_CONFIGURATION 0): never leave it looking at Apple ids
       if [ -f $D/s10.cfg0 ] && [ $((NOW - CP_ENTER)) -ge 2 ]; then
         log "PC pattern (SET_CONFIGURATION 0) while armed: back to ADB until the cable is pulled"

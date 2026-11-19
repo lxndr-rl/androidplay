@@ -12,6 +12,7 @@
 L=/data/local/tmp/swap.log; O=/sys/devices/platform/10c00000.usb/10c00000.dwc3; P=/sys/class/typec/port0
 LOCK=/data/local/tmp/swap.lock
 mkdir $LOCK 2>/dev/null || exit 0
+[ -x /data/local/tmp/archive_logs.sh ] && /data/local/tmp/archive_logs.sh pre-session >/dev/null 2>&1   # keep the previous logs before this session cleans/overwrites them
 t() { cut -d' ' -f1 /proc/uptime; }
 log() { echo "$(t) $*" >> $L; }
 radio_dev() {   # prints the sysfs path of the first non-root-hub USB device, if any
