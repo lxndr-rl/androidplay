@@ -13,13 +13,15 @@ def find():
                 return int(open(d + '/busnum').read()), int(open(d + '/devnum').read())
         except OSError:
             pass
-dev = None; t0 = time.time()
-while time.time() - t0 < wait:
+# The PC's own udev rule (39-usbmuxd.rules) starts usbmuxd for Apple ids; it reconfigures/resets the device, so the node may vanish or change
+# right after it appears. Retry the whole find+open until the deadline; only the answers actually read are judged.
+fd = None; t0 = time.time()
+while fd is None and time.time() - t0 < wait:
     dev = find()
-    if dev: break
-    time.sleep(0.05)
-if not dev: print('apple device never appeared'); sys.exit(3)
-fd = os.open('/dev/bus/usb/%03d/%03d' % dev, os.O_RDWR)
+    if not dev: time.sleep(0.02); continue
+    try: fd = os.open('/dev/bus/usb/%03d/%03d' % dev, os.O_RDWR)
+    except (PermissionError, FileNotFoundError): time.sleep(0.02)
+if fd is None: print('apple device never became usable'); sys.exit(3)
 def vendor_in(req, length):
     buf = ctypes.create_string_buffer(length)
     r = struct.pack('BBHHHIQ', 0xC0, req, 0, 0, length, 1000, ctypes.addressof(buf))

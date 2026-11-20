@@ -3,6 +3,8 @@
 # before every change to androidplayd.sh / ffs_probe. The phone stays plugged into the PC; it is rebooted for each scenario so
 # the cold-start path (the one that failed on the Captiva) is the one under test. Takes about 4 minutes.
 #   tests/hardware/bench_matrix.sh [--no-deploy]
+# Caveat: this PC runs usbmuxd (udev 39-usbmuxd.rules), which resets a device wearing Apple ids right after it appears; S2/S3 therefore judge the first
+# answers only. A real radio does not do that.
 # Needs: phone on adb with root, the build in .build/phone (scripts/build-phone.sh), the manager autostart installed.
 # Result: one PASS/FAIL line per scenario and a non-zero exit if any failed. It touches only /data/local/tmp flag files and restores them.
 set -u
@@ -22,7 +24,7 @@ adbq "rm -f $D/androidplay.reply $D/androidplay.learn $D/androidplay.learn.idx" 
 adb reboot; sleep 10; wait_adb || { fail "S1 boot" "adb never came back"; exit 1; }
 for _ in $(seq 1 60); do boot_log | grep -q "state ADB" && boot_log | grep -q "armed at start" && break; sleep 3; adb get-state >/dev/null 2>&1 || sleep 3; done
 L=$(boot_log)
-echo "$L" | grep -q "state CARPLAY (armed at start)" && pass "S1 armed at start with the cable in" || fail "S1 armed at start" "no 'armed at start' in the boot log"
+echo "$L" | grep -q "state CARPLAY (armed at start" && pass "S1 armed at start with the cable in" || fail "S1 armed at start" "no 'armed at start' in the boot log"
 echo "$L" | grep -q "PC pattern" && pass "S1 a PC is recognised and the phone returns to ADB" || fail "S1 PC recognised" "no PC pattern line"
 [ "$(adbq "cat $D/androidplayd.state")" = adb ] && pass "S1 adb is back with no replug" || fail "S1 adb back" "state=$(adbq "cat $D/androidplayd.state")"
 
@@ -30,7 +32,9 @@ echo "$L" | grep -q "PC pattern" && pass "S1 a PC is recognised and the phone re
 adb reboot; sleep 8
 OUT=$(python3 -I "$ROOT/tests/hardware/pc_apple_probe.py" 8 0.3 100 2>&1); echo "$OUT" | sed 's/^/      /'
 wait_adb || { fail "S2 boot" "adb never came back"; exit 1; }
-n=$(echo "$OUT" | grep -c 'reply=01000000'); [ "$n" -ge 6 ] && pass "S2 baseline answer to c0 53 ($n of 8)" || fail "S2 baseline answer" "$n of 8 answers were 01000000"
+# usbmuxd on the PC resets an iPhone-id device right after the first probe, so judge only the answers actually read: at least one, all baseline
+n=$(echo "$OUT" | grep -c 'reply=01000000'); o=$(echo "$OUT" | grep 'reply=' | grep -vc -E 'reply=(01000000|ERR:)')
+[ "$n" -ge 1 ] && [ "$o" = 0 ] && pass "S2 baseline answer to c0 53 ($n read, none different)" || fail "S2 baseline answer" "$n baseline answers, $o other values"
 for _ in $(seq 1 40); do boot_log | grep -q "state ADB" && break; sleep 3; done
 boot_log | grep -q "saw Apple probe" && pass "S2 manager saw the Apple probes" || fail "S2 probes seen" "no 'saw Apple probe'"
 [ "$(adbq "cat $D/androidplayd.state")" = adb ] && pass "S2 returns to ADB after the host goes quiet" || fail "S2 returns to ADB" "state=$(adbq "cat $D/androidplayd.state")"
@@ -40,7 +44,8 @@ adbq "echo testradio > $D/androidplay.radio; echo 'testradio 02000000' > $D/andr
 adb reboot; sleep 8
 OUT=$(python3 -I "$ROOT/tests/hardware/pc_apple_probe.py" 4 0.3 100 2>&1); echo "$OUT" | sed 's/^/      /'
 wait_adb || { fail "S3 boot" "adb never came back"; exit 1; }
-n=$(echo "$OUT" | grep -c 'reply=02000000'); [ "$n" -ge 3 ] && pass "S3 per-radio answer is served ($n of 4)" || fail "S3 per-radio answer" "$n of 4 answers were 02000000"
+n=$(echo "$OUT" | grep -c 'reply=02000000'); o=$(echo "$OUT" | grep 'reply=' | grep -vc -E 'reply=(02000000|ERR:)')
+[ "$n" -ge 1 ] && [ "$o" = 0 ] && pass "S3 per-radio answer is served ($n read, none different)" || fail "S3 per-radio answer" "$n answers of 02000000, $o other values"
 adbq "rm -f $D/androidplay.reply $D/androidplay.radio $D/androidplay.profile" >/dev/null
 
 adb root >/dev/null 2>&1; sleep 2
