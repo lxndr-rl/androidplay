@@ -77,8 +77,10 @@ to_carplay() { setids 0x05ac 0x12a8 "Apple Inc." iPhone "$SER_APPLE"; echo carpl
 
 kill_tracers() { for p in $(ps -A -o PID,ARGS | grep "[c]at /sys/kernel/tracing/trace_pipe" | awk '{print $1}'); do kill $p 2>/dev/null; done; }
 
+kill_ctl() { for p in $(ps -A -o PID,ARGS | grep "[d]ev.lxndr.ctl.CtlServer" | awk '{print $1}'); do kill $p 2>/dev/null; done; }
+
 stop_all() {
-  kill_tracers
+  kill_tracers; kill_ctl
   touch $D/androidplayd.stop
   [ -f $PIDF ] && kill $(cat $PIDF) 2>/dev/null
   for n in ffs_probe; do for p in $(pidof $n 2>/dev/null); do kill $p 2>/dev/null; done; done
@@ -178,6 +180,14 @@ TRACER=$!
   done ) &
 GUARD=$!
 
+# TEST AID (off unless androidplay.ctl exists): lets the AndroidPlay Control screen on the phone read state and switch modes without adb.
+# Loopback only and token protected, see services/Control. Not part of a release image.
+kill_ctl
+if [ -f $D/androidplay.ctl ] && [ -f $D/ctl.dex ] && [ -f $D/androidplay.token ]; then
+  CLASSPATH=$D/ctl.dex nohup app_process / dev.lxndr.ctl.CtlServer 47650 $D/androidplay.token > $D/ctl.log 2>&1 &
+  log "control server on 127.0.0.1:47650 (test aid)"
+fi
+
 trap 'stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0' TERM INT
 SERVED=0; NA=0; TICK=0; MISS=0; CFG=0; LAST_GENERIC=-9999; ARMED=0; NAI=0; CP_ENTER=0; CP_SINCE=$(cut -d. -f1 /proc/uptime); WANT_AT=0; TEMP_ADB=0
 EP_APPLE=0; EP_OK=0; EP_AOA=0   # what the radio did in this plug episode (learning mode and the archive use it)
@@ -192,6 +202,14 @@ while :; do
   [ -f $D/androidplayd.stop ] && exit 0
   S=$(cat $STATE)
   TICK=$((TICK+1))
+  # commands from the AndroidPlay Control screen (test aid): arm now / ADB now
+  if [ -f $D/androidplay.cmd ]; then
+    UICMD=$(cat $D/androidplay.cmd 2>/dev/null); rm -f $D/androidplay.cmd
+    case "$UICMD" in
+      arm) if [ "$S" = adb ] && [ "$NOSWITCH" != 1 ]; then log "ui: arm now"; touch $D/s10.switching; ensure_composed; to_carplay "armed (from the UI)"; ARMED=1; TEMP_ADB=0; rm -f $D/s10.switching; fi; continue;;
+      adb) if [ "$S" = carplay ] && [ "$NOSWITCH" != 1 ]; then log "ui: ADB now"; touch $D/s10.switching; to_adb; ARMED=0; TEMP_ADB=1; rm -f $D/s10.switching; fi; continue;;
+    esac
+  fi
   if [ $((TICK % 30)) = 0 ]; then log "alive: state=$S udc=$(cat $G/UDC) udc_state=$(cat /sys/class/udc/$UDC/state 2>/dev/null) ids=$(cat $G/idVendor):$(cat $G/idProduct) link=$([ -e $G/configs/b.1/s10_carplay ] && echo yes || echo NO) trace_on=$(cat $T/tracing_on)"; fi
   UST=$(cat /sys/class/udc/$UDC/state 2>/dev/null)
   # Link log (only on change): was the cable even seen? (The Chevrolet trip of 2026-11-18 showed 5 minutes armed with nothing, and with the

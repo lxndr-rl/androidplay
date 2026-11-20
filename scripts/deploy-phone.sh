@@ -12,6 +12,7 @@ adb root >/dev/null 2>&1 || true; sleep 2
 D=/data/local/tmp
 for f in gadget_manager ffs_probe mdns_probe carplay_phone usb_host_iap2 projector.dex inject.dex; do adb push "$PH/$f" $D/ >/dev/null; done
 adb push "$ROOT/scripts/device/androidplayd.sh" $D/ >/dev/null
+adb push "$PH/ctl.dex" $D/ >/dev/null; adb push "$PH/androidplay.token" $D/ >/dev/null; adb shell "chmod 600 $D/androidplay.token; chmod 644 $D/ctl.dex"
 adb push "$ROOT/scripts/device/learn.sh" $D/ >/dev/null
 adb push "$ROOT/scripts/device/archive_logs.sh" $D/ >/dev/null
 adb push "$ROOT/tests/hardware/swap_to_host_hook.sh" $D/ >/dev/null
@@ -21,9 +22,11 @@ adb install -r "$PH/ProjectionService-debug.apk" >/dev/null
 P=dev.lxndr.launcher
 for perm in ACCESS_FINE_LOCATION READ_PHONE_STATE POST_NOTIFICATIONS; do adb shell pm grant $P android.permission.$perm || true; done
 adb shell cmd notification allow_listener $P/$P.app.MediaListener || true
+# TEST AID: --ctl turns the AndroidPlay Control screen's server on (a flag file; the manager reads it at its next start), --noctl turns it off
+case "${1:-}" in --ctl) adb shell "touch $D/androidplay.ctl; chmod 666 $D/androidplay.ctl"; echo "control server enabled (restart the manager or reboot)";; --noctl) adb shell "rm -f $D/androidplay.ctl";; esac
 echo "deployed. Wi-Fi to treat as home (phone stays a normal ADB phone there):"
 echo "  adb shell 'echo -n \"YOUR_SSID\" > $D/androidplay.home_ssid'"
-if [ "${1:-}" = --start ]; then
+if [ "${1:-}" = --start ] || [ "${2:-}" = --start ]; then
   adb shell "APPLE_ID_OK=${APPLE_ID_OK:-} SOLE=1 nohup $D/androidplayd.sh start >/dev/null 2>&1 &"
   sleep 6; adb shell "$D/androidplayd.sh status | head -1" || echo "(adb may reconnect: replug the cable once if it does not return)"
 else

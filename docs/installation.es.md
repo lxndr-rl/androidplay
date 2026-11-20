@@ -142,6 +142,15 @@ Cada vez que la radio se rinde y vuelve a conectar, el gestor registra `learn: n
 de roles, la respuesta se guarda para ese nombre en `androidplay.profile`, y desde entonces `androidplay.radio` la selecciona. Las demás radios (Zlink
 incluida) mantienen la respuesta por defecto. Apaga el aprendizaje con `adb shell rm /data/local/tmp/androidplay.learn`. Aún no probado en ninguna radio.
 
+### La pantalla de control (ayuda de pruebas, no para entrega)
+
+`scripts/deploy-phone.sh --ctl` (y luego reiniciar o reiniciar el gestor) activa un pequeño servidor de control dentro del gestor e instala la pantalla **AndroidPlay Control**
+(con su propio icono en la lista de apps). Muestra el estado del gestor en vivo (ARMADO / ADB), la última línea del enlace USB y los últimos eventos, y tiene los botones "Armar ahora" y
+"Modo ADB" y los interruptores de las banderas de prueba (armado siempre, ventanas seguras, micrófono de la radio, aprendizaje, forzar ADB) y el nombre de la radio. El servidor escucha solo en
+127.0.0.1 y pide una clave que se genera al compilar y va dentro de la app, pero cualquier app que pueda leer esa clave podría cambiar los modos USB: úsalo solo en un teléfono de
+pruebas y apágalo con `scripts/deploy-phone.sh --noctl`. Para probar el armado, **desconecta antes el cable**: con el cable en un PC, armar desde la pantalla vuelve a ADB en segundos porque el
+PC se reconoce. (La notificación del sistema "AndroidPlay: ARMED" que el gestor publica con `cmd notification post` no se vio en pantalla en esta ROM; la pantalla de control es el indicador fiable.)
+
 ## Desinstalar / revertir
 
 ```bash

@@ -53,6 +53,12 @@ if [ -x "$ROOT/services/InputBridge/build.sh" ]; then
   else skipit inputbridge-core "javac missing"; fi
 fi
 
+# --- control server protocol (plain Java, host) ---
+if [ -x "$ROOT/services/Control/build.sh" ]; then
+  if command -v javac >/dev/null; then run control-protocol "$ROOT/services/Control/build.sh" test
+  else skipit control-protocol "javac missing"; fi
+fi
+
 # --- phone-side shell logic (learning ladder, per-radio profiles, evidence archive) ---
 if [ -x "$ROOT/tests/device/learn_test.sh" ]; then run device-shell "$ROOT/tests/device/learn_test.sh"; fi
 

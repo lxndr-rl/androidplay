@@ -140,6 +140,16 @@ Each time the radio gives up and re-plugs, the manager logs `learn: next N ...` 
 answer is saved for that radio name in `androidplay.profile`, and from then on `androidplay.radio` selects it. Other radios (Zlink included) keep the
 default answer. Turn learning off with `adb shell rm /data/local/tmp/androidplay.learn`. Not yet tried on any radio.
 
+### The control screen (test aid, not for release)
+
+`scripts/deploy-phone.sh --ctl` (then reboot or restart the manager) turns on a small control server inside the manager and installs the **AndroidPlay Control**
+screen (its own icon in the app list). It shows the manager's state live (ARMED / ADB), the last USB link line and the last events, and has buttons "Armar ahora" and
+"Modo ADB" plus switches for the test flags (always armed, secure windows, radio microphone, learning mode, force ADB) and the radio name. The server listens on
+127.0.0.1 only and wants a token that is generated at build time and packaged in the app, but any app that can read that token could switch USB modes: use it on a
+test phone only, and turn it off with `scripts/deploy-phone.sh --noctl`. To test arming, **unplug the cable first**: with the cable in a PC, arming from the screen
+returns to ADB within seconds because the PC is recognised. (The "AndroidPlay: ARMED" system notification that the manager also posts with `cmd notification post` was
+not seen on screen on this ROM; the control screen is the reliable indicator.)
+
 ## Uninstall / revert
 
 ```bash

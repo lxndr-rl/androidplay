@@ -23,6 +23,11 @@ cc -I"$C/include" "$C/src/usb_host_iap2.cpp" "$C/src/iap2_driver.cpp" "$C/src/ia
 echo "== dex and apks"
 "$ROOT/services/InputBridge/build.sh" dex >/dev/null && cp "$OUT/inputbridge/inject.dex" "$PH/"
 "$ROOT/services/Projector/build.sh" dex >/dev/null && cp "$OUT/projector/projector.dex" "$PH/"
-"$ROOT/packages/CarLauncher/build.sh" apk >/dev/null && cp "$OUT/carlauncher/CarLauncher-debug.apk" "$PH/"
+# Control screen (TEST AID): one random token per checkout, packaged in the app's assets and pushed to the phone for the control server
+mkdir -p "$OUT/ctl/assets"
+[ -s "$OUT/ctl/token" ] || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$OUT/ctl/token"
+cp "$OUT/ctl/token" "$OUT/ctl/assets/ctl.token"
+"$ROOT/services/Control/build.sh" dex >/dev/null && cp "$OUT/control/ctl.dex" "$PH/" && cp "$OUT/ctl/token" "$PH/androidplay.token"
+CTL_ASSETS="$OUT/ctl/assets" "$ROOT/packages/CarLauncher/build.sh" apk >/dev/null && cp "$OUT/carlauncher/CarLauncher-debug.apk" "$PH/"
 "$ROOT/services/ProjectionService/build.sh" apk >/dev/null && cp "$OUT/projection/ProjectionService-debug.apk" "$PH/"
 ls -l "$PH"

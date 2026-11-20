@@ -21,7 +21,8 @@ apk)
   rm -rf "$OUT/classes" "$OUT/dex" && mkdir -p "$OUT/classes" "$OUT/dex"
   javac --release 17 -Xlint:all -cp "$JAR" -d "$OUT/classes" $(find "$HERE/src" -name '*.java')
   "$BT/d8" --min-api 29 --lib "$JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
-  "$BT/aapt2" link --manifest "$HERE/AndroidManifest.xml" -I "$JAR" --min-sdk-version 29 --target-sdk-version 35 --debug-mode -o "$OUT/base.apk"
+  # CTL_ASSETS: optional folder packaged as assets (the Control screen's token); see scripts/build-phone.sh
+  "$BT/aapt2" link --manifest "$HERE/AndroidManifest.xml" -I "$JAR" --min-sdk-version 29 --target-sdk-version 35 --debug-mode ${CTL_ASSETS:+-A "$CTL_ASSETS"} -o "$OUT/base.apk"
   cp "$OUT/base.apk" "$OUT/unsigned.apk"
   (cd "$OUT/dex" && zip -q -j "$OUT/unsigned.apk" classes.dex)
   "$BT/zipalign" -f 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
