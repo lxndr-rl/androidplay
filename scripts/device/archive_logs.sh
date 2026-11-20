@@ -4,6 +4,7 @@
 # every episode, and by the session hook before it cleans its own logs.
 #   archive_logs.sh [tag]        tag: boot | episode | session | manual (default manual)
 # Retention: the newest KEEP snapshots and at most MAXKB kilobytes in total.
+umask 000   # the manager runs as root; the PC reads this over adb as the shell user
 D=${ARCHIVE_SRC:-/data/local/tmp}
 A=${ARCHIVE_DIR:-$D/archive}
 TAG=${1:-manual}
@@ -28,4 +29,5 @@ while [ "$(du -sk "$A" 2>/dev/null | cut -f1)" -gt "$MAXKB" ] 2>/dev/null; do
   [ -n "$oldest" ] && [ "$oldest" != "$DIR" ] || break
   rm -rf "$oldest"
 done
+chmod -R a+rX "$A" 2>/dev/null
 echo "$DIR"

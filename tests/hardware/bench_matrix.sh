@@ -36,13 +36,14 @@ boot_log | grep -q "saw Apple probe" && pass "S2 manager saw the Apple probes" |
 [ "$(adbq "cat $D/androidplayd.state")" = adb ] && pass "S2 returns to ADB after the host goes quiet" || fail "S2 returns to ADB" "state=$(adbq "cat $D/androidplayd.state")"
 
 # --- S3: a per-radio answer in force: the same probes now get that answer (proves ffs_probe reads the reply file)
-adbq "echo 02000000 > $D/androidplay.reply" >/dev/null
+adbq "echo testradio > $D/androidplay.radio; echo 'testradio 02000000' > $D/androidplay.profile" >/dev/null
 adb reboot; sleep 8
 OUT=$(python3 -I "$ROOT/tests/hardware/pc_apple_probe.py" 4 0.3 100 2>&1); echo "$OUT" | sed 's/^/      /'
 wait_adb || { fail "S3 boot" "adb never came back"; exit 1; }
 n=$(echo "$OUT" | grep -c 'reply=02000000'); [ "$n" -ge 3 ] && pass "S3 per-radio answer is served ($n of 4)" || fail "S3 per-radio answer" "$n of 4 answers were 02000000"
-adbq "rm -f $D/androidplay.reply" >/dev/null
+adbq "rm -f $D/androidplay.reply $D/androidplay.radio $D/androidplay.profile" >/dev/null
 
+adb root >/dev/null 2>&1; sleep 2
 # --- S4: the evidence is kept: the archive has snapshots from these runs, and the logs of an earlier boot survived the restarts above
 arch=$(adbq "ls -1d $D/archive/*-boot 2>/dev/null | wc -l"); [ "${arch:-0}" -ge 3 ] && pass "S4 evidence archived across reboots ($arch boot snapshots)" || fail "S4 evidence archive" "only ${arch:-0} boot snapshots"
 adbq "[ -x $D/archive_logs.sh ] && ls $D/archive | tail -1" | grep -q . && pass "S4 archive readable" || fail "S4 archive readable" "empty"

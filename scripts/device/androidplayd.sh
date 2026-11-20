@@ -20,7 +20,7 @@
 #   * A guard rebinds the UDC if it stays empty. Kill switch: touch /data/local/tmp/androidplay.off
 # env: FFS_MODE=clone|noeps (ffs_probe mode; default: ff/00/00 with two bulk endpoints)
 # usage: APPLE_ID_OK=own_radio_only [NOSWITCH=1] [SOLE=1] [SWEEP=1] androidplayd.sh [start|stop|status]     (NOSWITCH=1: only log what it would do)
-D=/data/local/tmp; G=/config/usb_gadget/g1; T=/sys/kernel/tracing
+D=/data/local/tmp; G=/config/usb_gadget/g1; T=/sys/kernel/tracing; O=/sys/devices/platform/10c00000.usb/10c00000.dwc3
 OFF=$D/androidplay.off; LOG=$D/androidplayd.log; PIDF=$D/androidplayd.pid; STATE=$D/androidplayd.state
 CARPLAY_GRACE=${CARPLAY_GRACE:-25}
 GENERIC=${GENERIC:-1}          # unknown-host trigger (hosts that never send the AOA probe, e.g. the Chevrolet radio)
@@ -113,6 +113,7 @@ UDC=$(ls /sys/class/udc | head -1)
 rm -f $D/androidplayd.stop
 echo $$ > $PIDF
 SER_ORIG=$(real_serial)
+[ -f $D/androidplay.nosole ] && SOLE=0     # experiment switch: keep the adb interface linked while armed
 SER_APPLE=00008030-001A2B3C4D5E6F78    # iPhone-style 25-char serial (made-up value)
 log "start: ids=$(cat $G/idVendor):$(cat $G/idProduct) udc=$(cat $G/UDC) serial_orig=$SER_ORIG"
 
@@ -125,9 +126,25 @@ profile_apply
 $D/gadget_manager --compose-into g1 setup >> $LOG 2>&1
 S10_REPLY_SWEEP=$SWEEP S10_SWAP_HOOK=$D/swap_to_host_hook.sh nohup $D/ffs_probe carplay 2592000 $FFS_MODE > $D/ffs_events.log 2>&1 &
 sleep 2
-$D/gadget_manager --compose-into g1 bind >> $LOG 2>&1
-echo adb > $STATE
-log "composed; state ADB (cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"
+# Every UDC unbind/bind is a disconnect+connect the host has to enumerate again, and on this phone repeated cycles make the host give up
+# ("device descriptor read error -71", "unable to enumerate": 1 good enumeration in 10 cycles on the bench, 2026-11-18). So when the phone is to
+# be armed anyway, bind ONCE, straight into the Apple identity, instead of binding as ADB first and switching a second later.
+START_ARMED=0
+if [ "$NOSWITCH" != 1 ] && [ "$(want_state)" = carplay ]; then
+  START_ARMED=1
+  # same steps as setids, except that the single bind is done by `gadget_manager bind`, which ALSO links the s10_carplay function into the
+  # configuration (binding the UDC without that link leaves a configuration with no functions: no USB at all)
+  [ "$SOLE" = 1 ] && rm -f $G/configs/b.1/function0
+  echo 0x05ac > $G/idVendor; echo 0x12a8 > $G/idProduct
+  echo "Apple Inc." > $G/strings/0x409/manufacturer; echo iPhone > $G/strings/0x409/product; echo "$SER_APPLE" > $G/strings/0x409/serialnumber
+  $D/gadget_manager --compose-into g1 bind >> $LOG 2>&1
+  echo carplay > $STATE; CP_SINCE=$(cut -d. -f1 /proc/uptime); CP_ENTER=$CP_SINCE; rm -f $D/s10.cfg0
+  log "state CARPLAY (armed at start; one bind, cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"; notify "ARMED: waiting for the radio (armed at start)"
+else
+  $D/gadget_manager --compose-into g1 bind >> $LOG 2>&1
+  echo adb > $STATE
+  log "composed; state ADB (cfg=$(ls $G/configs/b.1 | tr '\n' ' '))"
+fi
 
 # trace: remember the head unit's probes (AOA getProtocol c0 33 / Apple c0 53) in flag files
 kill_tracers
@@ -157,19 +174,18 @@ TRACER=$!
 ( while :; do sleep 2; [ -f $D/androidplayd.stop ] && exit 0
     a=$(cat $G/UDC 2>/dev/null)
     # only when a cable partner is present: with no cable Android leaves the UDC unbound on purpose
-    if [ -z "$a" ] && [ ! -f $D/s10.switching ] && [ -e /sys/class/typec/port0-partner ]; then sleep 2; b=$(cat $G/UDC 2>/dev/null); [ -z "$b" ] && { echo $UDC > $G/UDC 2>/dev/null; log "guard rebound the UDC"; }; fi
+    if [ -z "$a" ] && [ ! -f $D/s10.switching ] && [ ! -f $D/androidplay.noguard ] && [ -e /sys/class/typec/port0-partner ]; then sleep 2; b=$(cat $G/UDC 2>/dev/null); [ -z "$b" ] && { echo $UDC > $G/UDC 2>/dev/null; log "guard rebound the UDC"; }; fi
   done ) &
 GUARD=$!
 
 trap 'stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0' TERM INT
 SERVED=0; NA=0; TICK=0; MISS=0; CFG=0; LAST_GENERIC=-9999; ARMED=0; NAI=0; CP_ENTER=0; CP_SINCE=$(cut -d. -f1 /proc/uptime); WANT_AT=0; TEMP_ADB=0
 EP_APPLE=0; EP_OK=0; EP_AOA=0   # what the radio did in this plug episode (learning mode and the archive use it)
+LAST_LS=""   # link-state log
 # Armed from the first second. Booting (or starting) with the cable already in a radio used to leave the phone as plain ADB until the cable was
 # pulled: the radio then probed AOA, saw an Android and gave up before the slow AOA->CARPLAY switch finished (Captiva, 2026-11-17). A PC
 # plugged at that moment is not a problem: its SET_CONFIGURATION 0 (or CARPLAY_GRACE s without an Apple request) returns us to ADB.
-if [ "$NOSWITCH" != 1 ] && [ "$(want_state)" = carplay ]; then
-  touch $D/s10.switching; ensure_composed; to_carplay "armed at start"; ARMED=1; TEMP_ADB=0; rm -f $D/s10.switching
-fi
+[ $START_ARMED = 1 ] && { ARMED=1; TEMP_ADB=0; CP_ENTER=$(cut -d. -f1 /proc/uptime); CP_SINCE=$CP_ENTER; rm -f $D/s10.cfg0 $D/s10.apple $D/s10.aoa; }
 while :; do
   sleep 1
   [ -f $OFF ] && { log "kill switch: stopping"; stop_all; kill $TRACER $GUARD 2>/dev/null; exit 0; }
@@ -178,6 +194,12 @@ while :; do
   TICK=$((TICK+1))
   if [ $((TICK % 30)) = 0 ]; then log "alive: state=$S udc=$(cat $G/UDC) udc_state=$(cat /sys/class/udc/$UDC/state 2>/dev/null) ids=$(cat $G/idVendor):$(cat $G/idProduct) link=$([ -e $G/configs/b.1/s10_carplay ] && echo yes || echo NO) trace_on=$(cat $T/tracing_on)"; fi
   UST=$(cat /sys/class/udc/$UDC/state 2>/dev/null)
+  # Link log (only on change): was the cable even seen? (The Chevrolet trip of 2026-11-18 showed 5 minutes armed with nothing, and with the
+  # control-request log gone there was no way to tell a silent radio from an unseen cable.)
+  DR=$(cat /sys/class/typec/port0/data_role 2>/dev/null); DR=${DR#*[}; DR=${DR%%]*}
+  PR=$(cat /sys/class/typec/port0/power_role 2>/dev/null); PR=${PR#*[}; PR=${PR%%]*}
+  LS="partner=$([ -e /sys/class/typec/port0-partner ] && echo y || echo n) data=$DR power=$PR udc=$UST bsess=$(cat $O/b_sess 2>/dev/null) usb_online=$(cat /sys/class/power_supply/usb/online 2>/dev/null)"
+  [ "$LS" != "$LAST_LS" ] && { log "link: $LS"; LAST_LS=$LS; }
   if [ "$S" = adb ]; then
     # idle state: with no cable attached for 3 s, follow the location rule (armed away from home)
     if [ "$UST" = "not attached" ] && [ ! -f $D/s10.switching ]; then NAI=$((NAI+1)); else NAI=0; fi
